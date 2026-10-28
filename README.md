@@ -14,6 +14,8 @@ SSLert fills the gap.
 
 [Quickstart](#-quickstart-docker) · [Auth](#-authentication) · [Channels](#-alert-channels) · [API](#-api) · [Config](#%EF%B8%8F-environment-variables) · [Develop](#-development)
 
+[فارسی: راهنمای قدم‌به‌قدم نصب و استفاده](./README.fa.md)
+
 </div>
 
 <img src="screenshot-800w.png" alt="SSLert Dashboard" width="800" />
