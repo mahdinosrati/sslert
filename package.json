@@ -1,9 +1,9 @@
 {
   "name": "sslert",
-  "version": "0.4.1",
+  "version": "1.0.1",
   "license": "AGPL-3.0",
   "private": true,
-  "description": "Self-hosted SSL expiry monitor with email alerts",
+  "description": "Bamdad Alert — certificates, domains, licenses and API expiry monitoring",
   "workspaces": [
     "packages/*"
   ],
@@ -20,7 +20,7 @@
     "db:migrate": "npm run db:migrate --workspace=@sslert/api"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "overrides": {
     "vite": "^6.0.0"

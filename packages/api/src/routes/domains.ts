@@ -1,8 +1,10 @@
+import type { RequestActor } from "../middleware/auth.js";
+import { domainScope, canAccessDomain } from "../middleware/permissions.js";
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { type DB, getDb } from "../db/index.js";
-import { domains, checks } from "../db/schema.js";
+import { domains, checks, userDomains } from "../db/schema.js";
 import { runCheckForDomainById } from "../services/checker-runner.js";
 import { isPrivateAddress } from "../services/ssrf-guard.js";
 import { recordAudit } from "../services/audit.js";
@@ -20,7 +22,7 @@ import { toIsoString } from "../lib/datetime.js";
  * proper ISO 8601 with `Z`. (v0.5 timezone bug fix.)
  */
 function serializeDomain(
-  d: typeof domains.$inferSelect
+  d: typeof domains.$inferSelect,
 ): Record<string, unknown> {
   return {
     id: d.id,
@@ -38,7 +40,7 @@ function serializeDomain(
  * via `toISOString()`); `toIsoString` passes them through.
  */
 function serializeCheck(
-  c: typeof checks.$inferSelect
+  c: typeof checks.$inferSelect,
 ): Record<string, unknown> {
   return {
     id: c.id,
@@ -66,7 +68,7 @@ const hostnameSchema = z
   .max(253)
   .regex(
     /^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(\.[A-Za-z0-9-]{1,63})+$/,
-    "Invalid hostname"
+    "Invalid hostname",
   );
 
 const addDomainSchema = z.object({
@@ -75,7 +77,7 @@ const addDomainSchema = z.object({
 });
 
 type Env = {
-  Variables: { db: DB; actor?: { id: number; label: string } };
+  Variables: { db: DB; actor?: RequestActor };
 };
 
 export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
@@ -230,6 +232,30 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
     },
   });
 
+  app.patch("/:id", async (c) => {
+    const parsed = z
+      .object({ enabled: z.boolean() })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "Invalid input" }, 400);
+    const row = db
+      .update(domains)
+      .set({ ...parsed.data, updatedAt: new Date().toISOString() })
+      .where(eq(domains.id, Number(c.req.param("id"))))
+      .returning()
+      .get();
+    if (!row) return c.json({ error: "Not found" }, 404);
+    recordAudit(db, {
+      actorType: c.get("actor")?.kind ?? "system",
+      actorId: c.get("actor")?.label ?? "unknown",
+      action: "domain.update",
+      resourceType: "domain",
+      resourceId: String(row.id),
+      metadata: { enabled: row.enabled },
+    });
+    return c.json({ domain: serializeDomain(row) });
+  });
+
   app.post("/", async (c) => {
     let body: unknown;
     try {
@@ -239,7 +265,10 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
     }
     const parsed = addDomainSchema.safeParse(body);
     if (!parsed.success) {
-      return c.json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      return c.json(
+        { error: "Invalid input", details: parsed.error.flatten() },
+        400,
+      );
     }
     const { hostname, port } = parsed.data;
 
@@ -257,7 +286,7 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
               "SSLert cannot monitor internal services by default. " +
               "Set ALLOW_PRIVATE_HOSTS=1 to override (not recommended).",
           },
-          400
+          400,
         );
       }
     }
@@ -274,7 +303,7 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
           error: "Port must be 443 or 8443",
           hint: "Set ALLOW_NONSTANDARD_TLS_PORTS=1 to allow other ports.",
         },
-        400
+        400,
       );
     }
 
@@ -285,7 +314,7 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
       .limit(1)
       .all()[0];
     if (existing) {
-      return c.json({ error: "Domain already exists", domain: existing }, 409);
+      return c.json({ error: "Domain already exists" }, 409);
     }
     const inserted = db
       .insert(domains)
@@ -296,12 +325,17 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
     if (!domain) {
       return c.json({ error: "Failed to create domain" }, 500);
     }
+    const actor = c.get("actor");
+    if (actor && actor.role !== "admin")
+      db.insert(userDomains)
+        .values({ userId: actor.userId, domainId: domain.id })
+        .run();
     // v0.3 audit log: who created this domain. actorId is the caller's
     // token label, populated by the auth middleware via c.get('actor').
     // Falls back to "unknown" if for some reason the actor is missing
     // (e.g. AUTH_DISABLED=1 in dev). (Copilot review: domains.ts:106.)
     recordAudit(db, {
-      actorType: "api_token",
+      actorType: c.get("actor")?.kind ?? "api_token",
       actorId: c.get("actor")?.label ?? "unknown",
       action: "domain.create",
       resourceType: "domain",
@@ -316,7 +350,10 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
       // `getaddrinfo ENOTFOUND <host>`) to the API client. The full
       // err is logged server-side with the request id.
       const requestId = crypto.randomUUID();
-      logger.error({ err, requestId, domainId: domain.id }, "first check failed");
+      logger.error(
+        { err, requestId, domainId: domain.id },
+        "first check failed",
+      );
       firstCheck = { error: "check_failed", requestId };
     }
     return c.json(
@@ -340,11 +377,13 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
               domainExpiresAt:
                 firstCheck.domainExpiresAt === null
                   ? null
-                  : toIsoString(firstCheck.domainExpiresAt as unknown as string),
+                  : toIsoString(
+                      firstCheck.domainExpiresAt as unknown as string,
+                    ),
             }
           : null,
       },
-      201
+      201,
     );
   });
 
@@ -379,10 +418,11 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
               .from(checks)
               .where(eq(checks.domainId, domains.id))
               .orderBy(desc(checks.checkedAt))
-              .limit(1)
-          )
-        )
+              .limit(1),
+          ),
+        ),
       )
+      .where(domainScope(db, c.get("actor"), domains.id))
       .orderBy(desc(domains.createdAt))
       .all();
     // v0.5: rewrite SQLite-format datetimes into ISO 8601 with `Z`
@@ -402,7 +442,8 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
               error: r.lastCheck.error,
               checkedAt: toIsoString(r.lastCheck.checkedAt),
               domainExpiresAt: toIsoString(r.lastCheck.domainExpiresAt),
-              domainExpiresDaysRemaining: r.lastCheck.domainExpiresDaysRemaining,
+              domainExpiresDaysRemaining:
+                r.lastCheck.domainExpiresDaysRemaining,
               domainRegistrar: r.lastCheck.domainRegistrar,
               domainRegistrarError: r.lastCheck.domainRegistrarError,
             }
@@ -414,7 +455,12 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
   app.get("/:id", (c) => {
     const id = parseInt(c.req.param("id"), 10);
     if (Number.isNaN(id)) return c.json({ error: "Invalid id" }, 400);
-    const domain = db.select().from(domains).where(eq(domains.id, id)).limit(1).all()[0];
+    const domain = db
+      .select()
+      .from(domains)
+      .where(eq(domains.id, id))
+      .limit(1)
+      .all()[0];
     if (!domain) return c.json({ error: "Not found" }, 404);
     const recent = db
       .select()
@@ -444,7 +490,7 @@ export function createDomainsRouter(db: DB = getDb()): Hono<Env> {
     const result = db.delete(domains).where(eq(domains.id, id)).run();
     if (result.changes === 0) return c.json({ error: "Not found" }, 404);
     recordAudit(db, {
-      actorType: "api_token",
+      actorType: c.get("actor")?.kind ?? "api_token",
       actorId: c.get("actor")?.label ?? "unknown",
       action: "domain.delete",
       resourceType: "domain",

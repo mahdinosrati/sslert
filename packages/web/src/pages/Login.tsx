@@ -1,107 +1,176 @@
+import { useState } from "react";
+import { useNavigate, Navigate } from "react-router-dom";
+import { ShieldCheck } from "lucide-react";
+import { request } from "../lib/api";
+import { useAuth, useSessionUpdate, type User } from "../lib/auth";
 import { useI18n, errorMessage } from "../lib/i18n";
-import * as React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { ShieldCheck, AlertCircle } from "lucide-react";
-import { Button } from "../components/ui/button";
-import { Input, Label } from "../components/ui/input";
-import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
-import { setApiToken, api, ApiError } from "../lib/api";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
-
-// Login page. Accepts an API token, writes it to localStorage, probes
-// /api/domains to confirm the token is valid, then redirects. Token
-// storage: localStorage (not a cookie); nginx forwards Authorization.
+import { ThemeSwitcher } from "../components/ThemeSwitcher";
 export default function Login() {
   const { t } = useI18n();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [token, setToken] = React.useState("");
-  const [submitting, setSubmitting] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  const from = (location.state as { from?: string } | null)?.from ?? "/";
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const trimmed = token.trim();
-    if (!trimmed) {
-      setError("Please paste an API token.");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    setApiToken(trimmed);
-    try {
-      // 200 → token is valid; 401 → token wrong; network/502 → api is down.
-      await api.listDomains();
-      navigate(from, { replace: true });
-    } catch (err) {
-      // Clear the token so the user can retry without seeing a stale header.
-      setApiToken("");
-      if (err instanceof ApiError && err.status === 401) {
-        setError("That token was rejected (401). Check `sslert token list`.");
-      } else if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Unknown error");
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
+  const navigate = useNavigate(),
+    update = useSessionUpdate();
+  const auth = useAuth();
+  const [username, setUsername] = useState(""),
+    [password, setPassword] = useState(""),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  if (auth.data)
+    return (
+      <Navigate
+        to={auth.data.user.mustChangePassword ? "/password" : "/"}
+        replace
+      />
+    );
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-      <Card className="w-full max-w-md">
-        <div className="flex justify-end px-6 pt-4"><LanguageSwitcher /></div>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-6 w-6 text-sky-600" />
-            <CardTitle className="text-lg">{t("Sign in to SSLert")}</CardTitle>
-          </div>
-          <p className="text-sm text-slate-500">{t("Paste an API token created with")}{" "}
-            <code dir="ltr" className="inline-block break-all rounded bg-slate-100 px-1">node /app/dist/cli/tokens.js create --label admin</code>
-          </p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4" data-testid="login-form">
-            <div className="space-y-1.5">
-              <Label htmlFor="token">{t("API token")}</Label>
-              <Input
-                id="token"
-                name="token"
-                type="password"
-                dir="ltr"
-                autoComplete="off"
-                autoFocus
-                placeholder="cp_…"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                disabled={submitting}
-                data-testid="login-token-input"
-              />
-            </div>
-            {error && (
-              <div
-                role="alert"
-                data-testid="login-error"
-                className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
-              >
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{errorMessage(error)}</span>
-              </div>
-            )}
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={submitting || !token.trim()}
-              data-testid="login-submit"
-            >
-              {submitting ? t("Verifying…") : t("Sign in")}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
+      <section className="panel w-full max-w-md">
+        <div className="flex flex-wrap justify-end gap-2">
+          <LanguageSwitcher />
+          <ThemeSwitcher />
+        </div>
+        <ShieldCheck className="mt-6 h-9 w-9 text-sky-600" />
+        <h1 className="my-4 text-2xl font-semibold">
+          {t("Sign in to Bamdad Alert")}
+        </h1>
+        <p className="mb-6 text-sm text-slate-500">
+          {t("Monitor expiry. Stay ahead.")}
+        </p>
+        <form
+          className="form-grid"
+          data-testid="login-form"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError("");
+            try {
+              const r = await request<{ user: User }>("/api/auth/login", {
+                method: "POST",
+                body: JSON.stringify({ username, password }),
+              });
+              update(r.user);
+              navigate(r.user.mustChangePassword ? "/password" : "/", {
+                replace: true,
+              });
+            } catch (err) {
+              setError(errorMessage(err));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <label>
+            {t("Username")}
+            <input
+              autoComplete="username"
+              dir="ltr"
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          </label>
+          <label>
+            {t("Password")}
+            <input
+              autoComplete="current-password"
+              dir="ltr"
+              required
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          {error && (
+            <p role="alert" className="text-rose-600">
+              {error}
+            </p>
+          )}
+          <button className="primary" disabled={busy}>
+            {busy ? t("Verifying…") : t("Sign in")}
+          </button>
+        </form>
+      </section>
     </div>
+  );
+}
+export function PasswordPage() {
+  const { t } = useI18n();
+  const auth = useAuth(),
+    update = useSessionUpdate(),
+    navigate = useNavigate();
+  const [currentPassword, setCurrent] = useState(""),
+    [password, setPassword] = useState(""),
+    [confirm, setConfirm] = useState(""),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  if (auth.isPending) return <p>{t("Loading…")}</p>;
+  if (!auth.data) return <Navigate to="/login" replace />;
+  return (
+    <section className="panel mx-auto max-w-md">
+      <h1 className="text-xl font-semibold">{t("Change password")}</h1>
+      <p className="my-3">
+        {t("Use at least 12 characters. First login requires a new password.")}
+      </p>
+      <form
+        className="form-grid"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (password !== confirm) {
+            setError(t("Passwords do not match"));
+            return;
+          }
+          setBusy(true);
+          try {
+            const r = await request<{ user: User }>("/api/auth/password", {
+              method: "POST",
+              body: JSON.stringify({ currentPassword, password }),
+            });
+            update(r.user);
+            navigate("/");
+          } catch (err) {
+            setError(errorMessage(err));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label>
+          {t("Current password")}
+          <input
+            type="password"
+            required
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrent(e.target.value)}
+          />
+        </label>
+        <label>
+          {t("New password")}
+          <input
+            type="password"
+            required
+            minLength={12}
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </label>
+        <label>
+          {t("Confirm password")}
+          <input
+            type="password"
+            required
+            minLength={12}
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </label>
+        {error && <p role="alert">{error}</p>}
+        <button disabled={busy} className="primary">
+          {t("Save")}
+        </button>
+      </form>
+    </section>
   );
 }

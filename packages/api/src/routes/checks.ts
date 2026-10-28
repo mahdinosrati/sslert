@@ -1,13 +1,15 @@
+import type { AuthEnv } from "../middleware/auth.js";
+import { domainScope } from "../middleware/permissions.js";
 import { Hono } from "hono";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { type DB, getDb } from "../db/index.js";
 import { checks } from "../db/schema.js";
 import { openApiRegistry } from "../openapi/registry.js";
 import { z } from "zod";
 import { toIsoString } from "../lib/datetime.js";
 
-export function createChecksRouter(db: DB = getDb()): Hono {
-  const app = new Hono();
+export function createChecksRouter(db: DB = getDb()): Hono<AuthEnv> {
+  const app = new Hono<AuthEnv>();
 
   // Register the /api/checks path on the OpenAPI registry. The runtime
   // handler is unchanged — we just hand the library a `describeRoute`
@@ -65,14 +67,23 @@ export function createChecksRouter(db: DB = getDb()): Hono {
 
   app.get("/", (c) => {
     const domainIdParam = c.req.query("domain_id");
-    const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10) || 50, 500);
+    const limit = Math.min(
+      parseInt(c.req.query("limit") ?? "50", 10) || 50,
+      500,
+    );
     if (domainIdParam) {
       const domainId = parseInt(domainIdParam, 10);
-      if (Number.isNaN(domainId)) return c.json({ error: "Invalid domain_id" }, 400);
+      if (Number.isNaN(domainId))
+        return c.json({ error: "Invalid domain_id" }, 400);
       const rows = db
         .select()
         .from(checks)
-        .where(eq(checks.domainId, domainId))
+        .where(
+          and(
+            eq(checks.domainId, domainId),
+            domainScope(db, c.get("actor"), checks.domainId),
+          ),
+        )
         .orderBy(desc(checks.checkedAt))
         .limit(limit)
         .all();

@@ -1,79 +1,126 @@
-import { useI18n } from "./lib/i18n";
-import * as React from "react";
-import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import {
+  Routes,
+  Route,
+  Link,
+  useLocation,
+  Navigate,
+  useNavigate,
+} from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck, LogOut } from "lucide-react";
-import { Button } from "./components/ui/button";
+import { useI18n } from "./lib/i18n";
+import { request } from "./lib/api";
+import { useAuth, useSessionUpdate, permits } from "./lib/auth";
 import { AddDomainDialog } from "./components/AddDomainDialog";
+import { RequireAuth } from "./components/RequireAuth";
+import { LanguageSwitcher } from "./components/LanguageSwitcher";
+import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { Dashboard } from "./pages/Dashboard";
 import { DomainDetail } from "./pages/DomainDetail";
 import { AuditLog } from "./pages/AuditLog";
-import Login from "./pages/Login";
-import { RequireAuth } from "./components/RequireAuth";
-import { clearApiToken, getApiToken } from "./lib/api";
-import { LanguageSwitcher } from "./components/LanguageSwitcher";
-
+import Login, { PasswordPage } from "./pages/Login";
+import { Resources } from "./pages/Resources";
+import { Notifications } from "./pages/Notifications";
+import { Users, Settings } from "./pages/Users";
+import { About } from "./pages/About";
 export default function App() {
-  const { t, language } = useI18n();
-  const [addOpen, setAddOpen] = React.useState(false);
-  const location = useLocation();
-  const [hasToken, setHasToken] = React.useState<boolean>(() => Boolean(getApiToken()));
-  React.useEffect(() => {
-    const onTokenChange = () => setHasToken(Boolean(getApiToken()));
-    // Listen for both cross-tab (`storage`) and same-tab (custom event
-    // dispatched by setApiToken/clearApiToken) token changes.
-    window.addEventListener("storage", onTokenChange);
-    window.addEventListener("sslert.tokenchange", onTokenChange);
-    return () => {
-      window.removeEventListener("storage", onTokenChange);
-      window.removeEventListener("sslert.tokenchange", onTokenChange);
+  const { t, language } = useI18n(),
+    location = useLocation(),
+    navigate = useNavigate(),
+    auth = useAuth(),
+    update = useSessionUpdate(),
+    cache = useQueryClient();
+  const user = auth.data?.user;
+  const [addOpen, setAddOpen] = useState(false);
+  useEffect(() => {
+    document.title =
+      language === "fa"
+        ? "بامداد الرت | پایش اعتبار و هشدار"
+        : "Bamdad Alert | Expiry monitoring";
+  }, [language]);
+  useEffect(() => {
+    const expired = () => {
+      cache.clear();
+      navigate("/login");
     };
-  }, []);
-  const isLoginRoute = location.pathname === "/login";
-  React.useEffect(() => {
-    document.title = t(isLoginRoute ? "Sign in · SSLert" : "SSLert - SSL Expiry Monitor");
-  }, [isLoginRoute, language, t]);
+    window.addEventListener("bamdad.unauthorized", expired);
+    return () => window.removeEventListener("bamdad.unauthorized", expired);
+  }, [cache, navigate]);
+  const login = location.pathname === "/login";
+  const links = [
+    ["/", "Dashboard"],
+    ["/resources", "Licenses & API expiry"],
+    ["/notifications", "Notifications"],
+    ...(user?.role === "admin"
+      ? [
+          ["/users", "Users & access"],
+          ["/settings", "Settings"],
+          ["/audit", "Audit"],
+        ]
+      : []),
+    ["/about", "About us"],
+  ];
   return (
-    <div className="min-h-full">
-      {!isLoginRoute && (
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-            <Link to="/" className="flex items-center gap-2 text-slate-900">
-              <ShieldCheck className="h-6 w-6 text-sky-600" />
-              <span className="text-lg font-semibold">SSLert</span>
+    <div className="min-h-full bg-slate-50 text-slate-900">
+      {!login && (
+        <header className="border-b border-slate-200 bg-white">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4">
+            <Link
+              to="/"
+              className="flex items-center gap-2 text-xl font-semibold"
+            >
+              <ShieldCheck className="text-sky-600" />
+              <span>Bamdad Alert</span>
             </Link>
-            <nav className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <LanguageSwitcher />
-              <Link to="/">
-                <Button
-                  variant={location.pathname === "/" ? "secondary" : "ghost"}
-                  size="sm"
-                >{t("Dashboard")}</Button>
-              </Link>
-              <Link to="/audit">
-                <Button
-                  variant={location.pathname === "/audit" ? "secondary" : "ghost"}
-                  size="sm"
-                >{t("Audit")}</Button>
-              </Link>
-              <Button size="sm" onClick={() => setAddOpen(true)}>{t("+ Add")}</Button>
-              {hasToken && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  data-testid="signout-button"
-                  onClick={() => clearApiToken()}
-                  title={t("Clear stored token")}
+              <ThemeSwitcher />
+              {user && (
+                <button
+                  title={t("Sign out")}
+                  aria-label={t("Sign out")}
+                  className="secondary"
+                  onClick={async () => {
+                    await request("/api/auth/logout", { method: "POST" });
+                    update();
+                    navigate("/login");
+                  }}
                 >
                   <LogOut className="h-4 w-4" />
-                </Button>
+                </button>
               )}
-            </nav>
+            </div>
           </div>
+          {user && !user.mustChangePassword && (
+            <nav className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-4 pb-3">
+              {links.map(([href, label]) => (
+                <Link
+                  key={href}
+                  to={href}
+                  className={
+                    location.pathname === href ? "primary" : "secondary"
+                  }
+                >
+                  {t(label)}
+                </Link>
+              ))}
+              {permits(user, "canCreate") && (
+                <button className="secondary" onClick={() => setAddOpen(true)}>
+                  {t("+ Add domain")}
+                </button>
+              )}
+              <Link className="ms-auto text-sm text-slate-500" to="/password">
+                {t("Change password")}
+              </Link>
+            </nav>
+          )}
         </header>
       )}
-      <main className={isLoginRoute ? "" : "mx-auto max-w-6xl px-6 py-6"}>
+      <main className={login ? "" : "mx-auto max-w-7xl px-4 py-6 sm:px-6"}>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/password" element={<PasswordPage />} />
           <Route
             path="/"
             element={
@@ -91,28 +138,62 @@ export default function App() {
             }
           />
           <Route
-            path="/audit"
+            path="/resources"
             element={
               <RequireAuth>
+                <Resources />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <RequireAuth>
+                <Notifications />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <RequireAuth admin>
+                <Users />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <RequireAuth admin>
+                <Settings />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/audit"
+            element={
+              <RequireAuth admin>
                 <AuditLog />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/about"
+            element={
+              <RequireAuth>
+                <About />
               </RequireAuth>
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      {!isLoginRoute && (
-        <footer className="border-t border-slate-200 px-6 py-4 text-center text-sm text-slate-500">
-          {t("This panel was developed by")}{" "}
-          <a
-            href="https://github.com/mahdinosrati"
-            className="font-medium text-sky-700 hover:underline"
-          >
-            <bdi>MahdiNosrati</bdi>
-          </a>
+      {!login && (
+        <footer className="py-6 text-center text-xs text-slate-500">
+          Bamdad Alert · 1.0.1
         </footer>
       )}
-      {!isLoginRoute && (
+      {user && !user.mustChangePassword && permits(user, "canCreate") && (
         <AddDomainDialog open={addOpen} onOpenChange={setAddOpen} />
       )}
     </div>

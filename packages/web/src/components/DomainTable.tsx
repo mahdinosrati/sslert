@@ -1,3 +1,4 @@
+import { useAuth, permits } from "../lib/auth";
 import { useI18n, formatNumber } from "../lib/i18n";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw, Trash2, Loader2, Globe, AlertCircle } from "lucide-react";
@@ -19,6 +20,7 @@ import { humanizeCertError } from "../lib/cert-errors";
 
 export function DomainTable({ rows }: { rows: DomainRow[] }) {
   const { t } = useI18n();
+  const user = useAuth().data?.user;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -40,7 +42,11 @@ export function DomainTable({ rows }: { rows: DomainRow[] }) {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-12 text-center text-sm text-slate-500">{t("No domains yet. Click")}{" "}<span className="font-medium">{t("+ Add")}</span>{" "}{t("to start monitoring.")}</div>
+      <div className="rounded-lg border border-dashed border-slate-300 p-12 text-center text-sm text-slate-500">
+        {t("No domains yet. Click")}{" "}
+        <span className="font-medium">{t("+ Add")}</span>{" "}
+        {t("to start monitoring.")}
+      </div>
     );
   }
 
@@ -119,7 +125,9 @@ export function DomainTable({ rows }: { rows: DomainRow[] }) {
                     size="icon"
                     variant="ghost"
                     title={t("Check now")}
-                    disabled={checkMutation.isPending}
+                    disabled={
+                      checkMutation.isPending || !permits(user, "canEdit")
+                    }
                     onClick={() => checkMutation.mutate(domain.id)}
                   >
                     {checkMutation.isPending &&
@@ -133,8 +141,15 @@ export function DomainTable({ rows }: { rows: DomainRow[] }) {
                     size="icon"
                     variant="ghost"
                     title={t("Delete")}
+                    disabled={user?.role !== "admin"}
                     onClick={() => {
-                      if (confirm(t("Remove {hostname}?", { hostname: domain.hostname }))) {
+                      if (
+                        confirm(
+                          t("Remove {hostname}?", {
+                            hostname: domain.hostname,
+                          }),
+                        )
+                      ) {
                         deleteMutation.mutate(domain.id);
                       }
                     }}

@@ -111,14 +111,19 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = readToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "X-SSLert-Request": "1",
     ...(init?.headers as Record<string, string> | undefined),
   };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers,
+    credentials: "same-origin",
+  });
   if (!res.ok) {
     const status = res.status;
     let message: string;
@@ -133,7 +138,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         parsed = null;
       }
     }
-    if (parsed && typeof parsed === "object" && typeof parsed.error === "string") {
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed.error === "string"
+    ) {
       message = parsed.error;
     } else if (status === 401) {
       message = "Unauthorized — check your API token";
@@ -146,6 +155,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         ? `Request failed: ${status} — ${snippet}`
         : `Request failed: ${status}`;
     }
+    if (status === 401 && !path.endsWith("/login") && !path.endsWith("/me"))
+      window.dispatchEvent(new Event("bamdad.unauthorized"));
     throw new ApiError(status, message);
   }
   return (await res.json()) as T;
@@ -176,7 +187,7 @@ export const api = {
   upsertChannel: (
     domainId: number,
     channel: AlertChannel["channel"],
-    body: { enabled?: boolean; config?: Record<string, unknown> }
+    body: { enabled?: boolean; config?: Record<string, unknown> },
   ) =>
     request<{ channel: AlertChannel }>(`/api/domains/${domainId}/channels`, {
       method: "POST",

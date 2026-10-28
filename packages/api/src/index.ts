@@ -1,6 +1,22 @@
+import { createResourcesRouter } from "./routes/resources.js";
+import { createNotificationsRouter } from "./routes/notifications.js";
+import {
+  initializeNotifications,
+  centralEnabled,
+} from "./services/notifications.js";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { cors } from "hono/cors";
+import { bodyLimit } from "hono/body-limit";
+import { pathToFileURL } from "node:url";
+import { createLoginRouter, createAccountRouter } from "./routes/accounts.js";
+import { createSettingsRouter } from "./routes/settings.js";
+import { createTestAlertsRouter } from "./routes/test-alerts.js";
+import { ensureInitialAdmin } from "./services/users.js";
+import {
+  createPermissionsMiddleware,
+  domainScope,
+} from "./middleware/permissions.js";
+import type { AuthEnv } from "./middleware/auth.js";
 import { swaggerUI } from "@hono/swagger-ui";
 import { getDb, closeDb, type DB } from "./db/index.js";
 import { runSqlMigrations } from "./db/sqlmigrate.js";
@@ -11,7 +27,11 @@ import { createChannelsRouter } from "./routes/channels.js";
 import { createAuditLogRouter } from "./routes/audit-log.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
 import { createRateLimitMiddleware } from "./middleware/rate-limit.js";
-import { startScheduler, stopScheduler, getCheckIntervalMinutes } from "./services/scheduler.js";
+import {
+  startScheduler,
+  stopScheduler,
+  getCheckIntervalMinutes,
+} from "./services/scheduler.js";
 import { recentAlerts } from "./services/alerter.js";
 import { logger } from "./services/logger.js";
 import {
@@ -23,7 +43,11 @@ import {
   registry,
   tokensTotal,
 } from "./lib/metrics.js";
-import { buildOpenApiDocument, openApiRegistry, z } from "./openapi/registry.js";
+import {
+  buildOpenApiDocument,
+  openApiRegistry,
+  z,
+} from "./openapi/registry.js";
 import { toIsoString } from "./lib/datetime.js";
 import { sql, eq, desc } from "drizzle-orm";
 import { alerts, apiTokens, domains, schedulerState } from "./db/schema.js";
@@ -58,16 +82,21 @@ function dbPing(db: DB): boolean {
  */
 function refreshGauges(db: DB): void {
   try {
-    const d = db.select({ c: sql<number>`count(*)` }).from(domains).all()[0]?.c ?? 0;
+    const d =
+      db
+        .select({ c: sql<number>`count(*)` })
+        .from(domains)
+        .all()[0]?.c ?? 0;
     domainsTotal.set(Number(d));
   } catch (err) {
     logger.warn({ err }, "failed to refresh domains gauge");
   }
   try {
-    const t = db
-      .select({ c: sql<number>`count(*)` })
-      .from(apiTokens)
-      .all()[0]?.c ?? 0;
+    const t =
+      db
+        .select({ c: sql<number>`count(*)` })
+        .from(apiTokens)
+        .all()[0]?.c ?? 0;
     tokensTotal.set(Number(t));
   } catch (err) {
     logger.warn({ err }, "failed to refresh tokens gauge");
@@ -80,7 +109,9 @@ function refreshGauges(db: DB): void {
       .all()[0];
     if (row?.value) {
       const ts = Date.parse(row.value);
-      lastCheckTimestampSeconds.set(Number.isNaN(ts) ? 0 : Math.floor(ts / 1000));
+      lastCheckTimestampSeconds.set(
+        Number.isNaN(ts) ? 0 : Math.floor(ts / 1000),
+      );
     } else {
       lastCheckTimestampSeconds.set(0);
     }
@@ -99,8 +130,11 @@ function refreshGauges(db: DB): void {
       // fall back to the SQLite format. Either way, NaN => 0 so the
       // gauge is never undefined.
       let ts = Date.parse(row.createdAt);
-      if (Number.isNaN(ts)) ts = Date.parse(row.createdAt.replace(" ", "T") + "Z");
-      lastAlertTimestampSeconds.set(Number.isNaN(ts) ? 0 : Math.floor(ts / 1000));
+      if (Number.isNaN(ts))
+        ts = Date.parse(row.createdAt.replace(" ", "T") + "Z");
+      lastAlertTimestampSeconds.set(
+        Number.isNaN(ts) ? 0 : Math.floor(ts / 1000),
+      );
     } else {
       lastAlertTimestampSeconds.set(0);
     }
@@ -158,18 +192,10 @@ function lastAlertAgeSeconds(db: DB): number | null {
 
 export function createApp(options?: { db?: DB }) {
   const db = options?.db ?? getDb();
-  const app = new Hono();
+  const app = new Hono<AuthEnv>();
 
-  // CORS: reflect the request Origin (we sit behind nginx, which can also
-  // gate on this). Never use origin: "*" in production — paired with auth,
-  // echoing Origin is the standard hardening.
-  app.use(
-    "*",
-    cors({
-      origin: (origin) => origin ?? "*",
-      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    })
-  );
+  // UI and API share an origin through nginx/Vite. Do not reflect cross-origin credentials.
+  app.use("/api/*", bodyLimit({ maxSize: 64 * 1024 }));
 
   // Health & metrics are public — registered BEFORE the auth and
   // rate-limit middleware. This matches the existing behaviour of
@@ -181,8 +207,12 @@ export function createApp(options?: { db?: DB }) {
   // existing compose files don't break. Both endpoints return the
   // SAME shape (`{status, ts}`) so monitoring tooling that switches
   // from one to the other is not surprised.
-  app.get("/health", (c) => c.json({ status: "ok", ts: new Date().toISOString() }));
-  app.get("/health/live", (c) => c.json({ status: "ok", ts: new Date().toISOString() }));
+  app.get("/health", (c) =>
+    c.json({ status: "ok", ts: new Date().toISOString() }),
+  );
+  app.get("/health/live", (c) =>
+    c.json({ status: "ok", ts: new Date().toISOString() }),
+  );
 
   app.get("/health/ready", (c) => {
     const dbOk = dbPing(db);
@@ -232,8 +262,8 @@ export function createApp(options?: { db?: DB }) {
     "/api/docs",
     swaggerUI({
       url: "/api/openapi.json",
-      title: "SSLert API — Swagger UI",
-    })
+      title: "Bamdad Alert API — Swagger UI",
+    }),
   );
 
   // Document the public-utility endpoints (health, metrics, openapi,
@@ -299,7 +329,30 @@ export function createApp(options?: { db?: DB }) {
   // security boundary, just reversed so unauthed bursts can't
   // saturate the auth path before being throttled.)
   app.use("/api/*", createRateLimitMiddleware());
+  app.route("/api/auth", createLoginRouter(db));
   app.use("/api/*", createAuthMiddleware(db));
+  app.use("/api/*", createPermissionsMiddleware(db));
+  app.route("/api", createAccountRouter(db));
+  app.route("/api/resources", createResourcesRouter(db));
+  app.route("/api/notifications", createNotificationsRouter(db));
+  app.route("/api/settings", createSettingsRouter(db));
+  app.use("/api/domains/:id/channels/*", async (c, next) => {
+    if (centralEnabled(db) && c.req.method !== "GET")
+      return c.json(
+        { error: "Use central notification connections and policies" },
+        410,
+      );
+    return next();
+  });
+  app.use("/api/domains/:id/channels", async (c, next) => {
+    if (centralEnabled(db) && c.req.method !== "GET")
+      return c.json(
+        { error: "Use central notification connections and policies" },
+        410,
+      );
+    return next();
+  });
+  app.route("/api", createTestAlertsRouter(db));
 
   app.route("/api/domains", createDomainsRouter(db));
   app.route("/api/checks", createChecksRouter(db));
@@ -308,32 +361,43 @@ export function createApp(options?: { db?: DB }) {
   app.route("/api/audit-log", createAuditLogRouter(db));
 
   app.get("/api/alerts", (c) => {
-    const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10) || 50, 200);
+    const limit = Math.min(
+      parseInt(c.req.query("limit") ?? "50", 10) || 50,
+      200,
+    );
     // Bug #1 fix: `alerts.created_at` / `sent_at` are SQLite-format
     // (`YYYY-MM-DD HH:MM:SS` UTC, no `Z`). Rewrite to ISO 8601 so the
     // dashboard renders the dispatch time correctly regardless of
     // browser timezone.
-    const rows = recentAlerts(limit).map((r) => ({
-      alert: {
-        id: r.alert.id,
-        level: r.alert.level,
-        source: r.alert.source,
-        status: r.alert.status,
-        domainId: r.alert.domainId,
-        checkId: r.alert.checkId,
-        channel: r.alert.channel,
-        error: r.alert.error,
-        createdAt: toIsoString(r.alert.createdAt),
-        sentAt: toIsoString(r.alert.sentAt),
-      },
-      domain: r.domain
-        ? {
-            id: r.domain.id,
-            hostname: r.domain.hostname,
-            port: r.domain.port,
-          }
-        : null,
-    }));
+    const rows = db
+      .select({ alert: alerts, domain: domains })
+      .from(alerts)
+      .leftJoin(domains, eq(alerts.domainId, domains.id))
+      .where(domainScope(db, c.get("actor"), alerts.domainId))
+      .orderBy(desc(alerts.createdAt))
+      .limit(limit)
+      .all()
+      .map((r) => ({
+        alert: {
+          id: r.alert.id,
+          level: r.alert.level,
+          source: r.alert.source,
+          status: r.alert.status,
+          domainId: r.alert.domainId,
+          checkId: r.alert.checkId,
+          channel: r.alert.channel,
+          error: r.alert.error,
+          createdAt: toIsoString(r.alert.createdAt),
+          sentAt: toIsoString(r.alert.sentAt),
+        },
+        domain: r.domain
+          ? {
+              id: r.domain.id,
+              hostname: r.domain.hostname,
+              port: r.domain.port,
+            }
+          : null,
+      }));
     return c.json({ alerts: rows });
   });
   openApiRegistry.registerPath({
@@ -342,7 +406,11 @@ export function createApp(options?: { db?: DB }) {
     tags: ["alerts"],
     summary: "Recent alert dispatches (in-memory ring buffer)",
     security: [{ bearerAuth: [] }],
-    request: { query: z.object({ limit: z.coerce.number().int().min(1).max(200).optional() }) },
+    request: {
+      query: z.object({
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+      }),
+    },
     responses: { 200: { description: "OK" } },
   });
 
@@ -353,7 +421,7 @@ export function createApp(options?: { db?: DB }) {
     c.json({
       checkIntervalMinutes: getCheckIntervalMinutes(),
       hasResend: Boolean(process.env.RESEND_API_KEY),
-    })
+    }),
   );
   openApiRegistry.registerPath({
     method: "get",
@@ -373,10 +441,7 @@ export function createApp(options?: { db?: DB }) {
   app.onError((err, c) => {
     const requestId = crypto.randomUUID();
     logger.error({ err, requestId }, "[api] error");
-    return c.json(
-      { error: "Internal server error", requestId },
-      500
-    );
+    return c.json({ error: "Internal server error", requestId }, 500);
   });
 
   // Track the duration of every /api/* request. v0.3 records a single
@@ -406,12 +471,18 @@ export function createApp(options?: { db?: DB }) {
 export async function bootstrap() {
   getDb();
   runSqlMigrations();
+  await ensureInitialAdmin(getDb());
+  initializeNotifications(getDb());
   const app = createApp();
   const port = parseInt(process.env.PORT ?? "3000", 10);
   const scheduler = startScheduler();
   logger.info(
-    { port, cron: scheduler.expression, intervalMinutes: scheduler.intervalMinutes },
-    `[api] SSLert API listening on :${port}`
+    {
+      port,
+      cron: scheduler.expression,
+      intervalMinutes: scheduler.intervalMinutes,
+    },
+    `[api] Bamdad Alert API listening on :${port}`,
   );
   const server = serve({ fetch: app.fetch, port });
 
@@ -450,7 +521,8 @@ export async function bootstrap() {
   return { app, server };
 }
 
-const isDirect = import.meta.url === `file://${process.argv[1]}`;
+const isDirect =
+  !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isDirect) {
   bootstrap();
 }

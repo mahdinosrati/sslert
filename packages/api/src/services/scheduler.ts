@@ -1,3 +1,4 @@
+import { checkResourceExpiry } from "./notifications.js";
 import cron, { type ScheduledTask } from "node-cron";
 import { and, eq, sql } from "drizzle-orm";
 import { type DB, getDb } from "../db/index.js";
@@ -53,7 +54,10 @@ export function buildCronExpression(intervalMinutes: number): string {
  * text comparison in WHERE clauses (Copilot review: scheduler.ts:56).
  */
 function sqliteNow(): string {
-  return new Date().toISOString().replace("T", " ").replace(/\.\d{3}Z$/, "");
+  return new Date()
+    .toISOString()
+    .replace("T", " ")
+    .replace(/\.\d{3}Z$/, "");
 }
 
 /**
@@ -72,8 +76,8 @@ function tryClaimSchedulerLock(db: DB): boolean {
     .where(
       and(
         eq(schedulerState.key, "running"),
-        sql`(${schedulerState.value} = '0' OR ${schedulerState.updatedAt} < datetime('now', ${TICK_TIMEOUT_SQL}))`
-      )
+        sql`(${schedulerState.value} = '0' OR ${schedulerState.updatedAt} < datetime('now', ${TICK_TIMEOUT_SQL}))`,
+      ),
     )
     .run();
   return result.changes > 0;
@@ -99,7 +103,7 @@ export async function tickChecks(
     rejectUnauthorized?: boolean;
     timeoutMs?: number;
     concurrency?: number;
-  } = {}
+  } = {},
 ): Promise<{ ran: number; deduplicated?: boolean }> {
   // Seed the state row if it doesn't exist yet (older DBs pre-0004).
   // Wrapped in a best-effort try — INSERT OR IGNORE on PK violation is
@@ -123,6 +127,8 @@ export async function tickChecks(
       ...options,
       concurrency,
     });
+
+    await checkResourceExpiry(db);
 
     // Retention (M-1) runs once per day. We compare the stored
     // `last_retention` timestamp and the current time.
@@ -151,7 +157,7 @@ export async function tickChecks(
 
 export function startScheduler(
   db: DB = getDb(),
-  options: { rejectUnauthorized?: boolean; timeoutMs?: number } = {}
+  options: { rejectUnauthorized?: boolean; timeoutMs?: number } = {},
 ): { task: ScheduledTask; intervalMinutes: number; expression: string } {
   if (task) {
     return {

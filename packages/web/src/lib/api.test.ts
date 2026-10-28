@@ -17,7 +17,9 @@ afterEach(() => {
 });
 
 function stubFetch(response: Response): void {
-  globalThis.fetch = vi.fn().mockResolvedValue(response) as unknown as typeof fetch;
+  globalThis.fetch = vi
+    .fn()
+    .mockResolvedValue(response) as unknown as typeof fetch;
 }
 
 describe("api.ts — error handler (Bug 3)", () => {
@@ -25,10 +27,10 @@ describe("api.ts — error handler (Bug 3)", () => {
     // Build a fresh Response per call — bodies are one-shot, reusing
     // the same instance across two api calls would itself throw.
     const buildResponse = () =>
-      new Response(
-        "<html><body><h1>502 Bad Gateway</h1></body></html>",
-        { status: 502, headers: { "content-type": "text/html" } },
-      );
+      new Response("<html><body><h1>502 Bad Gateway</h1></body></html>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      });
 
     stubFetch(buildResponse());
     await expect(api.listDomains()).rejects.toMatchObject({
@@ -121,7 +123,7 @@ describe("api.ts — error handler (Bug 3)", () => {
 });
 
 describe("api.ts — Authorization header (Bug 2)", () => {
-  it("attaches Bearer header when a token is set", async () => {
+  it("uses CSRF-protected cookies and ignores legacy localStorage tokens", async () => {
     setApiToken("cp_test_token_abc123");
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ domains: [] }), {
@@ -136,7 +138,9 @@ describe("api.ts — Authorization header (Bug 2)", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Record<string, string>;
-    expect(headers["Authorization"]).toBe("Bearer cp_test_token_abc123");
+    expect(headers["Authorization"]).toBeUndefined();
+    expect(headers["X-SSLert-Request"]).toBe("1");
+    expect(init.credentials).toBe("same-origin");
   });
 
   it("does NOT attach Authorization header when no token is set", async () => {

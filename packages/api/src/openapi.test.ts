@@ -44,7 +44,7 @@ describe("v0.4 OpenAPI spec + Swagger UI", () => {
       components?: { securitySchemes?: Record<string, unknown> };
     };
     expect(spec.openapi).toMatch(/^3\./);
-    expect(spec.info.title).toBe("SSLert API");
+    expect(spec.info.title).toBe("Bamdad Alert API");
     expect(spec.info.version).toBeDefined();
     expect(spec.paths).toBeDefined();
   });
@@ -115,7 +115,9 @@ describe("v0.4 OpenAPI spec + Swagger UI", () => {
     const { app } = makeApp();
     const res = await app.request("/api/openapi.json");
     const spec = (await res.json()) as {
-      components?: { securitySchemes?: Record<string, { type: string; scheme: string }> };
+      components?: {
+        securitySchemes?: Record<string, { type: string; scheme: string }>;
+      };
     };
     expect(spec.components?.securitySchemes?.bearerAuth).toBeDefined();
     expect(spec.components!.securitySchemes!.bearerAuth.type).toBe("http");

@@ -1,98 +1,108 @@
-/**
- * Bearer-token auth middleware.
- *
- * Skips `/health` (used by the docker healthcheck and never carries data)
- * and is bypassed entirely when `AUTH_DISABLED` is set — for local dev
- * only. The escape hatch is documented; production deployments must NOT
- * set it.
- *
- * On a valid token, the caller's token row is exposed to downstream
- * handlers via `c.get('actor') = { id, label }` so audit writes can
- * attribute CRUD operations to the right token. `last_used_at` is
- * updated best-effort so operators can audit stale credentials. A
- * failure to update never blocks the request — auditability is
- * nice-to-have, the user request is the primary job.
- */
-import type { Context, MiddlewareHandler } from "hono";
+import type { MiddlewareHandler } from "hono";
+import { getCookie } from "hono/cookie";
 import { eq } from "drizzle-orm";
 import type { DB } from "../db/index.js";
-import { apiTokens } from "../db/schema.js";
+import { apiTokens, sessions, users } from "../db/schema.js";
 import { hashToken } from "../services/auth.js";
 
-/**
- * Shape of the actor record stashed on the request by the auth
- * middleware. Handlers read it back via `c.get('actor')` and pass
- * the label into `recordAudit(..., { actorId: actor.label })`.
- */
+export const SESSION_COOKIE = "sslert_session";
 export interface RequestActor {
   id: number;
+  userId: number;
   label: string;
+  role: "admin" | "user";
+  kind: "user" | "api_token" | "system";
+  mustChangePassword: boolean;
+  canCreate?: boolean;
+  canEdit?: boolean;
+  canTest?: boolean;
 }
-
-export type AuthEnv = {
-  Variables: {
-    actor?: RequestActor;
-  };
-};
-
+export type AuthEnv = { Variables: { actor?: RequestActor } };
 export function createAuthMiddleware(db: DB): MiddlewareHandler<AuthEnv> {
-  return async (c: Context<AuthEnv>, next) => {
-    // Dev escape hatch — NEVER set in production. Strictly compared so
-    // `AUTH_DISABLED=false` (or any other non-"1" value) leaves auth ON.
-    // The composer/scheduler refuse to boot in production with this set.
+  return async (c, next) => {
     if (process.env.AUTH_DISABLED === "1") {
-      if (process.env.NODE_ENV === "production") {
-        throw new Error(
-          "AUTH_DISABLED=1 is forbidden in production. Remove the env var."
-        );
-      }
+      if (process.env.NODE_ENV === "production")
+        throw new Error("AUTH_DISABLED=1 is forbidden in production");
+      c.set("actor", {
+        id: 0,
+        userId: 0,
+        label: "development",
+        role: "admin",
+        kind: "system",
+        mustChangePassword: false,
+      });
       return next();
     }
-
-    // /health is used by the docker healthcheck and must stay public.
-    if (c.req.path === "/health") return next();
-
     const header = c.req.header("authorization");
-    if (!header?.startsWith("Bearer ")) {
-      return c.json({ error: "Missing or invalid Authorization header" }, 401);
+    let userId: number;
+    let tokenId: number | undefined;
+    if (header) {
+      if (!header.startsWith("Bearer "))
+        return c.json({ error: "Invalid token" }, 401);
+      const found = db
+        .select()
+        .from(apiTokens)
+        .where(eq(apiTokens.tokenHash, hashToken(header.slice(7).trim())))
+        .get();
+      if (!found) return c.json({ error: "Invalid token" }, 401);
+      if (found.expiresAt && new Date(found.expiresAt).getTime() <= Date.now())
+        return c.json({ error: "Token expired" }, 401);
+      if (!found.userId)
+        return c.json(
+          {
+            error: "Legacy token has no owner. Create a new token for a user.",
+          },
+          401,
+        );
+      userId = found.userId;
+      tokenId = found.id;
+    } else {
+      const cookie = getCookie(c, SESSION_COOKIE);
+      const session = cookie
+        ? db
+            .select()
+            .from(sessions)
+            .where(eq(sessions.tokenHash, hashToken(cookie)))
+            .get()
+        : null;
+      if (!session || Date.parse(session.expiresAt) <= Date.now())
+        return c.json({ error: "Authentication required" }, 401);
+      userId = session.userId;
+      if (
+        !["GET", "HEAD", "OPTIONS"].includes(c.req.method) &&
+        c.req.header("X-SSLert-Request") !== "1"
+      )
+        return c.json({ error: "Invalid request origin" }, 403);
     }
-    const token = header.slice("Bearer ".length).trim();
-    if (!token) return c.json({ error: "Empty bearer token" }, 401);
-
-    const candidates = db
-      .select()
-      .from(apiTokens)
-      .where(eq(apiTokens.tokenHash, hashToken(token)))
-      .limit(1)
-      .all();
-
-    if (candidates.length === 0) {
-      return c.json({ error: "Invalid token" }, 401);
-    }
-
-    const found = candidates[0];
-
-    // Check expiry
-    if (found.expiresAt && new Date(found.expiresAt) < new Date()) {
-      return c.json({ error: "Token expired" }, 401);
-    }
-
-    // Expose the actor to downstream handlers so audit writes can
-    // attribute the action. (Copilot review: domains.ts:106 / 189,
-    // channels.ts:193 / 221 / 288 / 314 — audit rows were written
-    // with actorId: null instead of the caller's token label.)
-    c.set("actor", { id: found.id, label: found.label });
-
-    // Update last_used_at (best-effort, don't fail the request)
-    try {
+    const user = db.select().from(users).where(eq(users.id, userId)).get();
+    if (!user?.enabled)
+      return c.json({ error: "Account disabled or unavailable" }, 401);
+    c.set("actor", {
+      id: tokenId ?? user.id,
+      userId: user.id,
+      label: user.username,
+      role: user.role,
+      canCreate: user.canCreate,
+      canEdit: user.canEdit,
+      canTest: user.canTest,
+      kind: tokenId ? "api_token" : "user",
+      mustChangePassword: user.mustChangePassword,
+    });
+    if (
+      user.mustChangePassword &&
+      !["/api/auth/me", "/api/auth/password", "/api/auth/logout"].includes(
+        c.req.path,
+      )
+    )
+      return c.json(
+        { error: "Password change required", code: "PASSWORD_CHANGE_REQUIRED" },
+        403,
+      );
+    if (tokenId)
       db.update(apiTokens)
         .set({ lastUsedAt: new Date().toISOString() })
-        .where(eq(apiTokens.id, found.id))
+        .where(eq(apiTokens.id, tokenId))
         .run();
-    } catch {
-      // ignore — last-used bookkeeping should never block a request
-    }
-
     return next();
   };
 }

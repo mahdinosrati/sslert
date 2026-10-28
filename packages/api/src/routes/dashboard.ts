@@ -1,3 +1,5 @@
+import type { AuthEnv } from "../middleware/auth.js";
+import { domainScope } from "../middleware/permissions.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -7,8 +9,8 @@ import { openApiRegistry } from "../openapi/registry.js";
 import { dashboardSchema } from "../openapi/schemas.js";
 import { toIsoString } from "../lib/datetime.js";
 
-export function createDashboardRouter(db: DB = getDb()): Hono {
-  const app = new Hono();
+export function createDashboardRouter(db: DB = getDb()): Hono<AuthEnv> {
+  const app = new Hono<AuthEnv>();
 
   // Document /api/dashboard. The response shape is fully described by
   // the shared `dashboardSchema`; the `domains` array element shape is
@@ -55,7 +57,14 @@ export function createDashboardRouter(db: DB = getDb()): Hono {
         },
       })
       .from(domains)
-      .leftJoin(checks, eq(checks.id, sql`(SELECT id FROM checks WHERE domain_id = domains.id ORDER BY checked_at DESC LIMIT 1)`))
+      .leftJoin(
+        checks,
+        eq(
+          checks.id,
+          sql`(SELECT id FROM checks WHERE domain_id = domains.id ORDER BY checked_at DESC LIMIT 1)`,
+        ),
+      )
+      .where(domainScope(db, c.get("actor"), domains.id))
       .all();
 
     // Bug #2 fix: a cert whose TLS handshake failed (e.g. expired,
@@ -73,20 +82,20 @@ export function createDashboardRouter(db: DB = getDb()): Hono {
         d.lastCheck?.daysRemaining !== null &&
         d.lastCheck?.daysRemaining !== undefined &&
         d.lastCheck.daysRemaining <= 30 &&
-        d.lastCheck.daysRemaining > 0
+        d.lastCheck.daysRemaining > 0,
     ).length;
     const expired = allDomains.filter(
       (d) =>
         d.lastCheck?.daysRemaining !== null &&
         d.lastCheck?.daysRemaining !== undefined &&
-        d.lastCheck.daysRemaining <= 0
+        d.lastCheck.daysRemaining <= 0,
     ).length;
     const healthy = allDomains.filter(
       (d) =>
         d.lastCheck?.valid === true &&
         d.lastCheck?.daysRemaining !== null &&
         d.lastCheck?.daysRemaining !== undefined &&
-        d.lastCheck.daysRemaining > 30
+        d.lastCheck.daysRemaining > 30,
     ).length;
     // `unchecked` = no `checks` row yet (brand-new domain, or the
     // first scheduled run hasn't happened). Different from `invalid`
@@ -96,10 +105,10 @@ export function createDashboardRouter(db: DB = getDb()): Hono {
     // self-signed / hostname-mismatched, etc. `revoked` is a
     // sub-bucket of `invalid` so the UI can render a specific badge.
     const invalid = allDomains.filter(
-      (d) => d.lastCheck && d.lastCheck.valid === false
+      (d) => d.lastCheck && d.lastCheck.valid === false,
     ).length;
     const revoked = allDomains.filter(
-      (d) => d.lastCheck?.error === "cert_revoked"
+      (d) => d.lastCheck?.error === "cert_revoked",
     ).length;
 
     // Domain-registration expiry stats: independent of cert expiry.
@@ -108,13 +117,13 @@ export function createDashboardRouter(db: DB = getDb()): Hono {
         d.lastCheck?.domainExpiresDaysRemaining !== null &&
         d.lastCheck?.domainExpiresDaysRemaining !== undefined &&
         d.lastCheck.domainExpiresDaysRemaining <= 30 &&
-        d.lastCheck.domainExpiresDaysRemaining > 0
+        d.lastCheck.domainExpiresDaysRemaining > 0,
     ).length;
     const domainExpired = allDomains.filter(
       (d) =>
         d.lastCheck?.domainExpiresDaysRemaining !== null &&
         d.lastCheck?.domainExpiresDaysRemaining !== undefined &&
-        d.lastCheck.domainExpiresDaysRemaining <= 0
+        d.lastCheck.domainExpiresDaysRemaining <= 0,
     ).length;
 
     // Bug #1 fix: every SQLite datetime the dashboard returns was
@@ -138,8 +147,7 @@ export function createDashboardRouter(db: DB = getDb()): Hono {
             error: d.lastCheck.error,
             checkedAt: toIsoString(d.lastCheck.checkedAt),
             domainExpiresAt: toIsoString(d.lastCheck.domainExpiresAt),
-            domainExpiresDaysRemaining:
-              d.lastCheck.domainExpiresDaysRemaining,
+            domainExpiresDaysRemaining: d.lastCheck.domainExpiresDaysRemaining,
             domainRegistrar: d.lastCheck.domainRegistrar,
             domainRegistrarError: d.lastCheck.domainRegistrarError,
           }

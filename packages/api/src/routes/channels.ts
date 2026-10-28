@@ -1,3 +1,5 @@
+import type { RequestActor } from "../middleware/auth.js";
+import { domainScope, canAccessDomain } from "../middleware/permissions.js";
 import { Hono } from "hono";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
@@ -9,7 +11,13 @@ import { openApiRegistry } from "../openapi/registry.js";
 import { channelSchema, errorSchema } from "../openapi/schemas.js";
 import { toIsoString } from "../lib/datetime.js";
 
-const channelNameSchema = z.enum(["email", "webhook", "telegram", "slack", "ntfy"]);
+const channelNameSchema = z.enum([
+  "email",
+  "webhook",
+  "telegram",
+  "slack",
+  "ntfy",
+]);
 
 // Config validation per channel. Empty / partial configs are accepted —
 // the sender decides what is "missing required field" at send time.
@@ -20,7 +28,7 @@ const channelNameSchema = z.enum(["email", "webhook", "telegram", "slack", "ntfy
 // `X-SSLert-Signature: sha256=<hex>` + `X-SSLert-Timestamp`
 // headers so the receiver can verify the alert came from this
 // SSLert instance. Min length 16, max 256.
-const channelConfigSchema = z
+export const channelConfigSchema = z
   .object({
     url: z.string().url().optional(),
     to: z.string().email().optional(),
@@ -52,9 +60,9 @@ const updateSchema = z.object({
  * at save time (with 400) instead of at alert time (with a confusing
  * `Webhook error: invalid URL` from the sender). Closes H-1.
  */
-async function validateChannelConfig(
+export async function validateChannelConfig(
   channel: "email" | "webhook" | "telegram" | "slack" | "ntfy",
-  config: Record<string, unknown>
+  config: Record<string, unknown>,
 ): Promise<string | null> {
   if (channel === "webhook" || channel === "slack") {
     const url = config.url;
@@ -62,7 +70,7 @@ async function validateChannelConfig(
       return "url is required for webhook/slack channels";
     }
     const v = await validateWebhookUrl(url);
-    return v.ok ? null : v.error ?? "invalid url";
+    return v.ok ? null : (v.error ?? "invalid url");
   }
   if (channel === "ntfy") {
     let url: unknown = config.url;
@@ -77,7 +85,7 @@ async function validateChannelConfig(
       return "url or topic is required for ntfy channel";
     }
     const v = await validateWebhookUrl(url);
-    return v.ok ? null : v.error ?? "invalid url";
+    return v.ok ? null : (v.error ?? "invalid url");
   }
   // email / telegram — no URL to validate (telegram bot token is opaque
   // and the API host is hardcoded).
@@ -85,7 +93,7 @@ async function validateChannelConfig(
 }
 
 type Env = {
-  Variables: { db: DB; actor?: { id: number; label: string } };
+  Variables: { db: DB; actor?: RequestActor };
 };
 
 function ensureDomainExists(db: DB, domainId: number): boolean {
@@ -118,7 +126,8 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
     },
     responses: {
       200: {
-        description: "Channels (plus synthetic default-email if ALERT_EMAIL_TO is set)",
+        description:
+          "Channels (plus synthetic default-email if ALERT_EMAIL_TO is set)",
         content: {
           "application/json": {
             schema: z.object({ channels: z.array(channelSchema) }),
@@ -145,7 +154,13 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
         content: {
           "application/json": {
             schema: z.object({
-              channel: z.enum(["email", "webhook", "telegram", "slack", "ntfy"]),
+              channel: z.enum([
+                "email",
+                "webhook",
+                "telegram",
+                "slack",
+                "ntfy",
+              ]),
               enabled: z.boolean().optional(),
               config: z
                 .object({
@@ -270,8 +285,10 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
   // fallback when ALERT_EMAIL_TO is set globally).
   app.get("/domains/:domainId/channels", (c) => {
     const domainId = parseInt(c.req.param("domainId"), 10);
-    if (Number.isNaN(domainId)) return c.json({ error: "Invalid domainId" }, 400);
-    if (!ensureDomainExists(db, domainId)) return c.json({ error: "Domain not found" }, 404);
+    if (Number.isNaN(domainId))
+      return c.json({ error: "Invalid domainId" }, 400);
+    if (!ensureDomainExists(db, domainId))
+      return c.json({ error: "Domain not found" }, 404);
 
     const rows = db
       .select()
@@ -287,7 +304,7 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
     // line 288 returned the raw SQLite string, which a UTC+2 browser
     // would parse as local time and render "Created 2h ago" the
     // moment the row was inserted.
-    const out = rows.map(rowToJson);
+    const out = rows.map((row) => rowToJson(row, c.get("actor")?.role));
     if (!explicitEmail && process.env.ALERT_EMAIL_TO) {
       out.push({
         id: 0,
@@ -308,8 +325,10 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
   // Add (or upsert) a channel for a domain.
   app.post("/domains/:domainId/channels", async (c) => {
     const domainId = parseInt(c.req.param("domainId"), 10);
-    if (Number.isNaN(domainId)) return c.json({ error: "Invalid domainId" }, 400);
-    if (!ensureDomainExists(db, domainId)) return c.json({ error: "Domain not found" }, 404);
+    if (Number.isNaN(domainId))
+      return c.json({ error: "Invalid domainId" }, 400);
+    if (!ensureDomainExists(db, domainId))
+      return c.json({ error: "Domain not found" }, 404);
 
     let body: unknown;
     try {
@@ -319,31 +338,26 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
     }
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) {
-      return c.json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      return c.json(
+        { error: "Invalid input", details: parsed.error.flatten() },
+        400,
+      );
     }
 
-    // H-1: validate URL-bearing channel config at write time.
-    const urlError = await validateChannelConfig(
-      parsed.data.channel,
-      parsed.data.config
-    );
-    if (urlError) {
-      return c.json({ error: urlError }, 400);
-    }
-
-    const configJson = JSON.stringify(parsed.data.config);
-
-    // Upsert by (domain_id, channel). For email, this overrides the
-    // synthetic default and is the only way to set per-domain email
-    // recipients explicitly.
     const existing = db
-      .select({ id: alertChannels.id })
+      .select()
       .from(alertChannels)
       .where(
-        and(eq(alertChannels.domainId, domainId), eq(alertChannels.channel, parsed.data.channel))
+        and(
+          eq(alertChannels.domainId, domainId),
+          eq(alertChannels.channel, parsed.data.channel),
+        ),
       )
-      .limit(1)
-      .all()[0];
+      .get();
+    const config = preserveSecrets(existing?.config, parsed.data.config);
+    const urlError = await validateChannelConfig(parsed.data.channel, config);
+    if (urlError) return c.json({ error: urlError }, 400);
+    const configJson = JSON.stringify(config);
 
     if (existing) {
       const updated = db
@@ -357,7 +371,7 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
         .returning()
         .all()[0];
       recordAudit(db, {
-        actorType: "api_token",
+        actorType: c.get("actor")?.kind ?? "api_token",
         actorId: c.get("actor")?.label ?? "unknown",
         action: "channel.update",
         resourceType: "channel",
@@ -368,7 +382,7 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
           enabled: parsed.data.enabled,
         },
       });
-      return c.json({ channel: rowToJson(updated) });
+      return c.json({ channel: rowToJson(updated, c.get("actor")?.role) });
     }
 
     const now = new Date().toISOString();
@@ -383,9 +397,13 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
       createdAt: now,
       updatedAt: now,
     } as typeof alertChannels.$inferInsert;
-    const inserted = db.insert(alertChannels).values(values).returning().all()[0];
+    const inserted = db
+      .insert(alertChannels)
+      .values(values)
+      .returning()
+      .all()[0];
     recordAudit(db, {
-      actorType: "api_token",
+      actorType: c.get("actor")?.kind ?? "api_token",
       actorId: c.get("actor")?.label ?? "unknown",
       action: "channel.create",
       resourceType: "channel",
@@ -396,7 +414,7 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
         enabled: parsed.data.enabled,
       },
     });
-    return c.json({ channel: rowToJson(inserted) }, 201);
+    return c.json({ channel: rowToJson(inserted, c.get("actor")?.role) }, 201);
   });
 
   // Update an existing channel.
@@ -414,7 +432,10 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
     }
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) {
-      return c.json({ error: "Invalid input", details: parsed.error.flatten() }, 400);
+      return c.json(
+        { error: "Invalid input", details: parsed.error.flatten() },
+        400,
+      );
     }
 
     // H-1: if the patch updates the config, re-validate URL-bearing fields.
@@ -422,9 +443,14 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
     // the existing row.
     if (parsed.data.config !== undefined) {
       const existing = db
-        .select({ channel: alertChannels.channel })
+        .select({
+          channel: alertChannels.channel,
+          config: alertChannels.config,
+        })
         .from(alertChannels)
-        .where(and(eq(alertChannels.id, id), eq(alertChannels.domainId, domainId)))
+        .where(
+          and(eq(alertChannels.id, id), eq(alertChannels.domainId, domainId)),
+        )
         .limit(1)
         .all()[0];
       if (!existing) {
@@ -432,26 +458,31 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
       }
       const urlError = await validateChannelConfig(
         existing.channel as "email" | "webhook" | "telegram" | "slack" | "ntfy",
-        parsed.data.config
+        parsed.data.config,
       );
       if (urlError) {
         return c.json({ error: urlError }, 400);
       }
     }
 
-    const update: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+    const update: Record<string, unknown> = {
+      updatedAt: new Date().toISOString(),
+    };
     if (parsed.data.enabled !== undefined) update.enabled = parsed.data.enabled;
-    if (parsed.data.config !== undefined) update.config = JSON.stringify(parsed.data.config);
+    if (parsed.data.config !== undefined)
+      update.config = JSON.stringify(parsed.data.config);
 
     const result = db
       .update(alertChannels)
       .set(update)
-      .where(and(eq(alertChannels.id, id), eq(alertChannels.domainId, domainId)))
+      .where(
+        and(eq(alertChannels.id, id), eq(alertChannels.domainId, domainId)),
+      )
       .returning()
       .all()[0];
     if (!result) return c.json({ error: "Not found" }, 404);
     recordAudit(db, {
-      actorType: "api_token",
+      actorType: c.get("actor")?.kind ?? "api_token",
       actorId: c.get("actor")?.label ?? "unknown",
       action: "channel.update",
       resourceType: "channel",
@@ -462,7 +493,7 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
         configChanged: parsed.data.config !== undefined,
       },
     });
-    return c.json({ channel: rowToJson(result) });
+    return c.json({ channel: rowToJson(result, c.get("actor")?.role) });
   });
 
   // Delete a channel.
@@ -474,11 +505,13 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
     }
     const result = db
       .delete(alertChannels)
-      .where(and(eq(alertChannels.id, id), eq(alertChannels.domainId, domainId)))
+      .where(
+        and(eq(alertChannels.id, id), eq(alertChannels.domainId, domainId)),
+      )
       .run();
     if (result.changes === 0) return c.json({ error: "Not found" }, 404);
     recordAudit(db, {
-      actorType: "api_token",
+      actorType: c.get("actor")?.kind ?? "api_token",
       actorId: c.get("actor")?.label ?? "unknown",
       action: "channel.delete",
       resourceType: "channel",
@@ -499,13 +532,16 @@ function parseConfig(raw: string): Record<string, unknown> {
   }
 }
 
-function rowToJson(r: typeof alertChannels.$inferSelect) {
+function rowToJson(r: typeof alertChannels.$inferSelect, role?: string) {
+  const config = parseConfig(r.config);
+  if (role && role !== "admin")
+    for (const key of ["botToken", "secret", "url"]) delete config[key];
   return {
     id: r.id,
     domainId: r.domainId,
     channel: r.channel,
     enabled: r.enabled,
-    config: parseConfig(r.config),
+    config,
     // v0.5 timezone fix: the row stores `created_at` / `updated_at`
     // as `YYYY-MM-DD HH:MM:SS` UTC. Rewrite on the way out so the
     // frontend doesn't show "Created 2h ago" the moment the row is
@@ -516,3 +552,14 @@ function rowToJson(r: typeof alertChannels.$inferSelect) {
 }
 
 export const channelsRouter = createChannelsRouter();
+
+function preserveSecrets(
+  raw: string | undefined,
+  config: Record<string, unknown>,
+) {
+  const result = { ...config };
+  const previous = raw ? parseConfig(raw) : {};
+  for (const key of ["botToken", "secret", "url"])
+    if (!(key in result) && key in previous) result[key] = previous[key];
+  return result;
+}

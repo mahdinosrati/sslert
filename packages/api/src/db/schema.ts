@@ -38,8 +38,12 @@ export const domains = sqliteTable("domains", {
   hostname: text("hostname").notNull().unique(),
   port: integer("port").default(443).notNull(),
   enabled: integer("enabled", { mode: "boolean" }).default(true).notNull(),
-  createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
-  updatedAt: text("updated_at").default(sql`(datetime('now'))`).notNull(),
+  createdAt: text("created_at")
+    .default(sql`(datetime('now'))`)
+    .notNull(),
+  updatedAt: text("updated_at")
+    .default(sql`(datetime('now'))`)
+    .notNull(),
 });
 
 export const checks = sqliteTable("checks", {
@@ -47,7 +51,9 @@ export const checks = sqliteTable("checks", {
   domainId: integer("domain_id")
     .notNull()
     .references(() => domains.id, { onDelete: "cascade" }),
-  checkedAt: text("checked_at").default(sql`(datetime('now'))`).notNull(),
+  checkedAt: text("checked_at")
+    .default(sql`(datetime('now'))`)
+    .notNull(),
   valid: integer("valid", { mode: "boolean" }).notNull(),
   issuer: text("issuer"),
   issuerOrg: text("issuer_org"),
@@ -80,7 +86,9 @@ export const alerts = sqliteTable("alerts", {
   status: text("status").notNull().default("pending"),
   sentAt: text("sent_at"),
   error: text("error"),
-  createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+  createdAt: text("created_at")
+    .default(sql`(datetime('now'))`)
+    .notNull(),
 });
 
 /**
@@ -98,17 +106,119 @@ export const alertChannels = sqliteTable("alert_channels", {
   enabled: integer("enabled", { mode: "boolean" }).default(true).notNull(),
   // JSON-encoded config: { url, botToken, chatId, topic, ... }
   config: text("config").notNull().default("{}"),
-  createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
-  updatedAt: text("updated_at").default(sql`(datetime('now'))`).notNull(),
+  createdAt: text("created_at")
+    .default(sql`(datetime('now'))`)
+    .notNull(),
+  updatedAt: text("updated_at")
+    .default(sql`(datetime('now'))`)
+    .notNull(),
 });
 
 export const apiTokens = sqliteTable("api_tokens", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   tokenHash: text("token_hash").notNull().unique(),
   label: text("label").notNull(),
-  createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
+  createdAt: text("created_at")
+    .default(sql`(datetime('now'))`)
+    .notNull(),
   expiresAt: text("expires_at"),
   lastUsedAt: text("last_used_at"),
+  userId: integer("user_id").references(() => users.id, {
+    onDelete: "cascade",
+  }),
+});
+
+export const users = sqliteTable("users", {
+  canCreate: integer("can_create", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  canEdit: integer("can_edit", { mode: "boolean" }).notNull().default(false),
+  canTest: integer("can_test", { mode: "boolean" }).notNull().default(false),
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  role: text("role").$type<"admin" | "user">().notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  mustChangePassword: integer("must_change_password", { mode: "boolean" })
+    .notNull()
+    .default(true),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+export const userDomains = sqliteTable("user_domains", {
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  domainId: integer("domain_id")
+    .notNull()
+    .references(() => domains.id, { onDelete: "cascade" }),
+});
+export const sessions = sqliteTable("sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: text("expires_at").notNull(),
+});
+export const appSettings = sqliteTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+export const loginAttempts = sqliteTable("login_attempts", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull(),
+  expiresAt: text("expires_at").notNull(),
+});
+
+export const resources = sqliteTable("resources", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind").$type<"license" | "api">().notNull(),
+  title: text("title").notNull(),
+  provider: text("provider").notNull().default(""),
+  owner: text("owner").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  expiresAt: text("expires_at"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+export const userResources = sqliteTable("user_resources", {
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  resourceId: integer("resource_id")
+    .notNull()
+    .references(() => resources.id, { onDelete: "cascade" }),
+});
+export const connections = sqliteTable("connections", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  channel: text("channel").notNull(),
+  config: text("config").notNull().default("{}"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  shared: integer("shared", { mode: "boolean" }).notNull().default(false),
+});
+export const notificationPolicies = sqliteTable("notification_policies", {
+  key: text("key").primaryKey(),
+  mode: text("mode").notNull().default("inherit"),
+  connectionIds: text("connection_ids").notNull().default("[]"),
+  thresholds: text("thresholds").notNull().default("[30,7,1,0]"),
+  repeatHours: integer("repeat_hours").notNull().default(24),
+});
+export const deliveries = sqliteTable("deliveries", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  targetKey: text("target_key").notNull(),
+  source: text("source").notNull(),
+  connectionId: integer("connection_id").references(() => connections.id, {
+    onDelete: "set null",
+  }),
+  level: text("level").notNull(),
+  status: text("status").notNull(),
+  error: text("error"),
+  createdAt: text("created_at").notNull(),
+  isTest: integer("is_test", { mode: "boolean" }).notNull().default(false),
 });
 
 export type Domain = typeof domains.$inferSelect;
@@ -129,7 +239,9 @@ export type NewApiToken = typeof apiTokens.$inferInsert;
 export const schedulerState = sqliteTable("scheduler_state", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
-  updatedAt: text("updated_at").default(sql`(datetime('now'))`).notNull(),
+  updatedAt: text("updated_at")
+    .default(sql`(datetime('now'))`)
+    .notNull(),
 });
 
 export type SchedulerState = typeof schedulerState.$inferSelect;
@@ -142,7 +254,9 @@ export type NewSchedulerState = typeof schedulerState.$inferInsert;
  */
 export const auditLog = sqliteTable("audit_log", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  timestamp: text("timestamp").default(sql`(datetime('now'))`).notNull(),
+  timestamp: text("timestamp")
+    .default(sql`(datetime('now'))`)
+    .notNull(),
   // "user" | "api_token" | "system"
   actorType: text("actor_type").notNull(),
   // Token label, remote IP, or "scheduler"/"migration" for system actors.
@@ -156,7 +270,10 @@ export const auditLog = sqliteTable("audit_log", {
   resourceId: text("resource_id"),
   // JSON-encoded. Captures (before, after) for updates, reason for
   // deletes, or a free-form payload for login attempts.
-  metadata: text("metadata", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  metadata: text("metadata", { mode: "json" }).$type<Record<
+    string,
+    unknown
+  > | null>(),
 });
 
 export type AuditLog = typeof auditLog.$inferSelect;

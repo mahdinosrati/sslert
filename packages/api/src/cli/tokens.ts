@@ -12,7 +12,7 @@
  */
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/index.js";
-import { apiTokens } from "../db/schema.js";
+import { apiTokens, users } from "../db/schema.js";
 import { generateToken, hashToken } from "../services/auth.js";
 import { recordAudit } from "../services/audit.js";
 
@@ -33,11 +33,34 @@ async function main() {
       process.exit(2);
     }
     const expires = getArg("expires", false);
+    const username = getArg("user", true);
+    const owner = username
+      ? db
+          .select()
+          .from(users)
+          .where(eq(users.username, username.toLowerCase()))
+          .get()
+      : undefined;
+    if (!owner?.enabled || owner.mustChangePassword) {
+      console.error(
+        "--user USERNAME must name an enabled user who has changed their initial password.",
+      );
+      process.exit(2);
+    }
+    if (expires && !Number.isFinite(Date.parse(expires))) {
+      console.error("Invalid --expires date");
+      process.exit(2);
+    }
     const token = generateToken();
     const hash = hashToken(token);
     const inserted = db
       .insert(apiTokens)
-      .values({ tokenHash: hash, label, expiresAt: expires ?? null })
+      .values({
+        tokenHash: hash,
+        label,
+        userId: owner.id,
+        expiresAt: expires ?? null,
+      })
       .returning({ id: apiTokens.id })
       .all()[0];
     recordAudit(db, {
@@ -48,7 +71,9 @@ async function main() {
       resourceId: String(inserted?.id ?? ""),
       metadata: { label, expiresAt: expires ?? null },
     });
-    console.log(`Token created. SAVE THIS — it will not be shown again:\n  ${token}`);
+    console.log(
+      `Token created. SAVE THIS — it will not be shown again:\n  ${token}`,
+    );
     return;
   }
 
@@ -57,6 +82,7 @@ async function main() {
       .select({
         id: apiTokens.id,
         label: apiTokens.label,
+        userId: apiTokens.userId,
         createdAt: apiTokens.createdAt,
         expiresAt: apiTokens.expiresAt,
         lastUsedAt: apiTokens.lastUsedAt,
@@ -98,7 +124,7 @@ async function main() {
   }
 
   console.error(
-    "Usage: tsx src/cli/tokens.ts {create|list|revoke} [--label LABEL] [--expires ISO] [--id N]"
+    "Usage: tsx src/cli/tokens.ts {create|list|revoke} [--label LABEL] [--user USERNAME] [--expires ISO] [--id N]",
   );
   process.exit(1);
 }

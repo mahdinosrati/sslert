@@ -19,6 +19,7 @@ services:
       - CHECK_INTERVAL=${CHECK_INTERVAL:-60}
       - PORT=3000
       - NODE_ENV=production
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-0}
     # Read-only root filesystem — only the data volume is writable.
     # /tmp gets a tmpfs in case anything wants scratch space.
     read_only: true

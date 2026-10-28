@@ -11,7 +11,7 @@
  */
 import { lt, sql } from "drizzle-orm";
 import { type DB } from "../db/index.js";
-import { checks, alerts } from "../db/schema.js";
+import { checks, alerts, deliveries } from "../db/schema.js";
 import { logger } from "../services/logger.js";
 import { pruneAuditLog } from "../services/audit.js";
 
@@ -62,18 +62,21 @@ export interface RetentionResult {
 
 export function runRetention(
   db: DB,
-  options: { checkDays?: number; alertDays?: number; auditDays?: number } = {}
+  options: { checkDays?: number; alertDays?: number; auditDays?: number } = {},
 ): RetentionResult {
   // Explicit argument > env var > module default. The env-var path is
   // what the PR body advertises ("RETENTION_DAYS / ALERT_RETENTION_DAYS
   // override") — without it, an operator can't tune retention without
   // recompiling.
-  const checkDays = options.checkDays
-    ?? readRetentionEnv(RETENTION_DAYS_ENV, CHECK_RETENTION_DAYS);
-  const alertDays = options.alertDays
-    ?? readRetentionEnv(ALERT_RETENTION_DAYS_ENV, ALERT_RETENTION_DAYS);
-  const auditDays = options.auditDays
-    ?? readRetentionEnv(AUDIT_RETENTION_DAYS_ENV, AUDIT_RETENTION_DAYS);
+  const checkDays =
+    options.checkDays ??
+    readRetentionEnv(RETENTION_DAYS_ENV, CHECK_RETENTION_DAYS);
+  const alertDays =
+    options.alertDays ??
+    readRetentionEnv(ALERT_RETENTION_DAYS_ENV, ALERT_RETENTION_DAYS);
+  const auditDays =
+    options.auditDays ??
+    readRetentionEnv(AUDIT_RETENTION_DAYS_ENV, AUDIT_RETENTION_DAYS);
 
   const checkCutoff = sqliteNowOffset(-checkDays * 86_400_000);
   const alertCutoff = sqliteNowOffset(-alertDays * 86_400_000);
@@ -86,6 +89,15 @@ export function runRetention(
     .delete(alerts)
     .where(lt(alerts.createdAt, alertCutoff))
     .run().changes;
+
+  db.delete(deliveries)
+    .where(
+      lt(
+        deliveries.createdAt,
+        new Date(Date.now() - alertDays * 86_400_000).toISOString(),
+      ),
+    )
+    .run();
 
   // Audit log retention (v0.3). Default 90 days, configurable via
   // AUDIT_LOG_RETENTION_DAYS. Kept as a separate prune call so the

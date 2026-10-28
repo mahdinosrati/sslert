@@ -1,3 +1,5 @@
+import { useAuth, permits } from "../lib/auth";
+import { NotificationPolicy } from "./Notifications";
 import { useI18n, formatNumber, errorMessage } from "../lib/i18n";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, Link } from "react-router-dom";
@@ -26,12 +28,13 @@ import {
 } from "../components/ui/table";
 import { StatusBadge } from "../components/StatusBadge";
 import { ChannelsEditor } from "../components/ChannelsEditor";
-import { api } from "../lib/api";
+import { api, request } from "../lib/api";
 import { formatDate, formatDistanceToNowStrict } from "../lib/format";
 import { certErrorTitle, certErrorDescription } from "../lib/cert-errors";
 
 export function DomainDetail() {
   const { t } = useI18n();
+  const user = useAuth().data?.user;
   const { id } = useParams<{ id: string }>();
   const domainId = parseInt(id ?? "0", 10);
   const navigate = useNavigate();
@@ -52,6 +55,17 @@ export function DomainDetail() {
     },
   });
 
+  const toggleMutation = useMutation({
+    mutationFn: () =>
+      request(`/api/domains/${domainId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: !detail.data?.domain.enabled }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["domain", domainId] });
+      queryClient.invalidateQueries({ queryKey: ["domains"] });
+    },
+  });
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteDomain(domainId),
     onSuccess: () => {
@@ -69,11 +83,14 @@ export function DomainDetail() {
   if (detail.isError) {
     return (
       <div className="space-y-4">
-        <Link to="/" className="inline-flex items-center gap-1 text-sm text-sky-600">
-          <ArrowLeft className="h-4 w-4" />{t("Back to dashboard")}</Link>
-        <p className="text-sm text-red-600">
-          {errorMessage(detail.error)}
-        </p>
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1 text-sm text-sky-600"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {t("Back to dashboard")}
+        </Link>
+        <p className="text-sm text-red-600">{errorMessage(detail.error)}</p>
       </div>
     );
   }
@@ -90,36 +107,64 @@ export function DomainDetail() {
           to="/"
           className="inline-flex items-center gap-1 text-sm text-sky-600"
         >
-          <ArrowLeft className="h-4 w-4" />{t("Dashboard")}</Link>
-        <div className="flex gap-2">
+          <ArrowLeft className="h-4 w-4" />
+          {t("Dashboard")}
+        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!permits(user, "canEdit") || toggleMutation.isPending}
+            onClick={() => toggleMutation.mutate()}
+          >
+            {t(domain.enabled ? "Pause monitoring" : "Resume monitoring")}
+          </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => checkMutation.mutate()}
-            disabled={checkMutation.isPending}
+            disabled={checkMutation.isPending || !permits(user, "canEdit")}
           >
             {checkMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <RefreshCw className="h-4 w-4" />
-            )}{t("Check Now")}</Button>
+            )}
+            {t("Check Now")}
+          </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
-              if (confirm(t("Remove {hostname}?", { hostname: domain.hostname }))) {
+              if (
+                confirm(t("Remove {hostname}?", { hostname: domain.hostname }))
+              ) {
                 deleteMutation.mutate();
               }
             }}
           >
-            <Trash2 className="h-4 w-4 text-rose-500" />{t("Delete")}</Button>
+            <Trash2 className="h-4 w-4 text-rose-500" />
+            {t("Delete")}
+          </Button>
         </div>
       </div>
 
+      {(toggleMutation.error ||
+        checkMutation.error ||
+        deleteMutation.error) && (
+        <p role="alert" className="text-rose-600">
+          {errorMessage(
+            toggleMutation.error || checkMutation.error || deleteMutation.error,
+          )}
+        </p>
+      )}
       <div className="flex items-center gap-3">
         <ShieldCheck className="h-8 w-8 text-sky-600" />
         <div>
-          <h1 dir="ltr" className="break-all font-mono text-2xl font-semibold text-slate-900">
+          <h1
+            dir="ltr"
+            className="break-all font-mono text-2xl font-semibold text-slate-900"
+          >
             {domain.hostname}
             <span className="ms-1 text-slate-400">:{domain.port}</span>
           </h1>
@@ -130,15 +175,17 @@ export function DomainDetail() {
                 {days === null || days === undefined
                   ? t("Cert never checked")
                   : days > 0
-                  ? t("{days} days remaining", { days: formatNumber(days) })
-                  : t("Cert expired")}
+                    ? t("{days} days remaining", { days: formatNumber(days) })
+                    : t("Cert expired")}
               </span>
             </span>
             {domainDays !== null && domainDays !== undefined && (
               <span className="flex items-center gap-1">
                 <Globe className="h-3 w-3 text-slate-400" />
                 {domainDays > 0
-                  ? t("Domain expires in {days} days", { days: formatNumber(domainDays) })
+                  ? t("Domain expires in {days} days", {
+                      days: formatNumber(domainDays),
+                    })
                   : t("Domain expired")}
               </span>
             )}
@@ -150,20 +197,25 @@ export function DomainDetail() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4" />{t("TLS Certificate")}</CardTitle>
+              <ShieldCheck className="h-4 w-4" />
+              {t("TLS Certificate")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <Row label={t("Issuer")} value={latest?.issuer ?? "—"} />
             <Row label={t("Issuer Org")} value={latest?.issuerOrg ?? "—"} />
             <Row label={t("Serial")} value={latest?.serial ?? "—"} mono />
-            <Row label={t("Valid From")} value={formatDate(latest?.notBefore)} />
+            <Row
+              label={t("Valid From")}
+              value={formatDate(latest?.notBefore)}
+            />
             <Row label={t("Valid To")} value={formatDate(latest?.notAfter)} />
             <Row
               label={t("Last Check")}
               value={
                 latest?.checkedAt
                   ? `${formatDate(latest.checkedAt)} (${formatDistanceToNowStrict(
-                      new Date(latest.checkedAt)
+                      new Date(latest.checkedAt),
                     )})`
                   : "—"
               }
@@ -178,9 +230,7 @@ export function DomainDetail() {
                 role="alert"
                 className="mt-2 rounded-md bg-rose-50 p-2 text-xs text-rose-700"
               >
-                <p className="font-medium">
-                  {certErrorTitle(latest.error)}
-                </p>
+                <p className="font-medium">{certErrorTitle(latest.error)}</p>
                 <p className="mt-0.5 text-rose-600">
                   {certErrorDescription(latest.error)}
                 </p>
@@ -192,16 +242,21 @@ export function DomainDetail() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Globe className="h-4 w-4" />{t("Domain Registration")}</CardTitle>
+              <Globe className="h-4 w-4" />
+              {t("Domain Registration")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Row label={t("Registrar")} value={latest?.domainRegistrar ?? "—"} />
+            <Row
+              label={t("Registrar")}
+              value={latest?.domainRegistrar ?? "—"}
+            />
             <Row
               label={t("Expires")}
               value={
                 latest?.domainExpiresAt
                   ? `${formatDate(latest.domainExpiresAt)} (${formatDistanceToNowStrict(
-                      new Date(latest.domainExpiresAt)
+                      new Date(latest.domainExpiresAt),
                     )})`
                   : "—"
               }
@@ -220,8 +275,13 @@ export function DomainDetail() {
               </p>
             )}
             {!latest?.domainRegistrarError &&
-              (latest?.domainExpiresAt === null || latest?.domainExpiresAt === undefined) && (
-                <p className="mt-2 rounded-md bg-slate-50 p-2 text-xs text-slate-600">{t("WHOIS/RDAP not yet resolved — re-run \"Check Now\" to retry.")}</p>
+              (latest?.domainExpiresAt === null ||
+                latest?.domainExpiresAt === undefined) && (
+                <p className="mt-2 rounded-md bg-slate-50 p-2 text-xs text-slate-600">
+                  {t(
+                    'WHOIS/RDAP not yet resolved — re-run "Check Now" to retry.',
+                  )}
+                </p>
               )}
           </CardContent>
         </Card>
@@ -234,14 +294,18 @@ export function DomainDetail() {
           </CardHeader>
           <CardContent className="p-0">
             {checks.length === 0 ? (
-              <p className="p-6 text-sm text-slate-500">{t("No checks yet.")}</p>
+              <p className="p-6 text-sm text-slate-500">
+                {t("No checks yet.")}
+              </p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t("When")}</TableHead>
                     <TableHead className="text-end">{t("Cert Days")}</TableHead>
-                    <TableHead className="text-end">{t("Domain Days")}</TableHead>
+                    <TableHead className="text-end">
+                      {t("Domain Days")}
+                    </TableHead>
                     <TableHead>{t("Status")}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -252,10 +316,14 @@ export function DomainDetail() {
                         {formatDistanceToNowStrict(new Date(c.checkedAt))}
                       </TableCell>
                       <TableCell className="text-end font-mono">
-                        {c.daysRemaining == null ? "—" : formatNumber(c.daysRemaining)}
+                        {c.daysRemaining == null
+                          ? "—"
+                          : formatNumber(c.daysRemaining)}
                       </TableCell>
                       <TableCell className="text-end font-mono">
-                        {c.domainExpiresDaysRemaining == null ? "—" : formatNumber(c.domainExpiresDaysRemaining)}
+                        {c.domainExpiresDaysRemaining == null
+                          ? "—"
+                          : formatNumber(c.domainExpiresDaysRemaining)}
                       </TableCell>
                       <TableCell>
                         {c.error ? (
@@ -272,13 +340,21 @@ export function DomainDetail() {
           </CardContent>
         </Card>
 
-        <ChannelsEditor domainId={domainId} />
+        <NotificationPolicy targetKey={`domain:${domainId}`} />
       </div>
     </div>
   );
 }
 
-function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Row({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   const { t } = useI18n();
   return (
     <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-1.5 last:border-0">

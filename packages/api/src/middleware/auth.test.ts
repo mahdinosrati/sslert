@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import Database from "better-sqlite3";
-import { drizzle, type BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import {
+  drizzle,
+  type BetterSQLite3Database,
+} from "drizzle-orm/better-sqlite3";
 import { createAuthMiddleware } from "./auth.js";
 import { generateToken, hashToken } from "../services/auth.js";
 import * as schema from "../db/schema.js";
@@ -75,7 +78,20 @@ describe("auth middleware", () => {
     const { db } = makeDb();
     const token = generateToken();
     db.insert(schema.apiTokens)
-      .values({ tokenHash: hashToken(token), label: "test" })
+      .values({
+        tokenHash: hashToken(token),
+        label: "test",
+        userId: db
+          .insert(schema.users)
+          .values({
+            username: "owner",
+            passwordHash: "unused",
+            role: "admin",
+            mustChangePassword: false,
+          })
+          .returning()
+          .get()!.id,
+      })
       .run();
     const app = new Hono();
     app.use("/api/*", createAuthMiddleware(db));

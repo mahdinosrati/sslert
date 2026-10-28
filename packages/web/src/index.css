@@ -20,10 +20,15 @@ html[lang="fa"] body {
   font-family: "Vazir", Tahoma, sans-serif;
 }
 
-code { direction: ltr; unicode-bidi: isolate; }
+code {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
 html[dir="rtl"] .lucide-arrow-left,
 html[dir="rtl"] .lucide-chevron-left,
-html[dir="rtl"] .lucide-chevron-right { transform: scaleX(-1); }
+html[dir="rtl"] .lucide-chevron-right {
+  transform: scaleX(-1);
+}
 
 @theme {
   --color-brand-50: #f0f9ff;
@@ -32,10 +37,139 @@ html[dir="rtl"] .lucide-chevron-right { transform: scaleX(-1); }
   --color-brand-700: #0369a1;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+    Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+}
+
+/* Shared controls and theme tokens keep every panel, table and dialog consistent. */
+.panel {
+  border: 1px solid var(--color-slate-200);
+  background: var(--color-white);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px #00000008;
+}
+.form-grid {
+  display: grid;
+  gap: 1rem;
+}
+.form-grid label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+}
+.form-grid input:not([type="checkbox"]),
+.form-grid select,
+.form-grid textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-slate-300);
+  background: var(--color-white);
+  color: var(--color-slate-900);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+}
+.form-grid .check-label,
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+}
+input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #0284c7;
+}
+.primary,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.primary {
+  background: #0369a1;
+  color: #fff;
+  border: 1px solid #0369a1;
+}
+.secondary {
+  background: var(--color-white);
+  color: var(--color-slate-700);
+  border: 1px solid var(--color-slate-200);
+}
+button:disabled,
+fieldset:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 3px;
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-white: #182438;
+  --color-slate-50: #0c1423;
+  --color-slate-100: #202e43;
+  --color-slate-200: #344259;
+  --color-slate-300: #485974;
+  --color-slate-400: #94a6bf;
+  --color-slate-500: #a4b2c8;
+  --color-slate-600: #becade;
+  --color-slate-700: #d1dced;
+  --color-slate-800: #e2eaf6;
+  --color-slate-900: #edf3fc;
+  --color-sky-50: #102b40;
+  --color-sky-100: #173b56;
+  --color-sky-600: #38bdf8;
+  --color-sky-700: #7dd3fc;
+  --color-rose-50: #3a1d2b;
+  --color-rose-100: #4a2635;
+  --color-rose-600: #fda4af;
+  --color-rose-700: #fecdd3;
+  --color-red-50: #361e28;
+  --color-red-200: #7f3545;
+  --color-red-600: #fca5a5;
+  --color-red-800: #fecaca;
+  --color-amber-50: #352a16;
+  --color-amber-100: #463519;
+  --color-amber-600: #fbbf24;
+  --color-amber-700: #fcd34d;
+  --color-amber-800: #fde68a;
+  --color-emerald-50: #12352c;
+  --color-emerald-100: #174333;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+}
+html[data-theme="dark"] .text-white {
+  color: #fff;
+}
+html[data-theme="dark"] .bg-sky-600 {
+  background: #0369a1;
+}
+body {
+  background: var(--color-slate-50);
+  color: var(--color-slate-900);
+}
+html[data-theme="dark"] {
+  --color-orange-50: #3b291a;
+  --color-orange-800: #fed7aa;
+  --color-orange-200: #7c4b27;
+  --color-red-100: #421e2a;
+  --color-red-900: #fecaca;
+  --color-rose-800: #fecdd3;
 }

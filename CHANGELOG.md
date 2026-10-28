@@ -1,3 +1,7 @@
+# 1.0.1 — Bamdad Alert
+
+Account login and granular access, central notifications and tests, software license/API expiry dates, Persian UI, dark mode and bilingual About page. See [release notes](docs/releases/1.0.1.md) and [upgrade guide](README.fa.md).
+
 # Changelog
 
 All notable changes to SSLert are documented in this file. The format

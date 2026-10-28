@@ -1,6 +1,13 @@
+import { centralEnabled, dispatchExpiry } from "./notifications.js";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { type DB, getDb } from "../db/index.js";
-import { alertChannels, alerts, checks, domains, type AlertChannel } from "../db/schema.js";
+import {
+  alertChannels,
+  alerts,
+  checks,
+  domains,
+  type AlertChannel,
+} from "../db/schema.js";
 import {
   type AlertContent,
   type ChannelName,
@@ -26,8 +33,8 @@ const ALERT_LEVELS: AlertLevelInfo[] = [
   { level: "warning", subject: "Expires in 30 days", threshold: 30 },
 ];
 
-const SUBJECT_PREFIX_CERT = "[SSLert]";
-const SUBJECT_PREFIX_DOMAIN = "[SSLert Domain]";
+const SUBJECT_PREFIX_CERT = "[Bamdad Alert]";
+const SUBJECT_PREFIX_DOMAIN = "[Bamdad Alert Domain]";
 
 /**
  * Format a JS Date in SQLite's `datetime('now')` form
@@ -45,7 +52,9 @@ function sqliteNowOffset(offsetMs: number): string {
     .replace(/\.\d{3}Z$/, "");
 }
 
-export function determineAlertLevel(daysRemaining: number | null | undefined): AlertLevelInfo | null {
+export function determineAlertLevel(
+  daysRemaining: number | null | undefined,
+): AlertLevelInfo | null {
   if (daysRemaining === null || daysRemaining === undefined) return null;
   if (daysRemaining <= 0) return ALERT_LEVELS[0];
   if (daysRemaining <= 1) return ALERT_LEVELS[1];
@@ -96,7 +105,7 @@ function recordAlertAttempt(
     channel: ChannelName;
     level: AlertLevel;
     dedupWindowHours: number;
-  }
+  },
 ): boolean {
   // SQLite stores `created_at` as `datetime('now')` — i.e. UTC text in
   // `YYYY-MM-DD HH:MM:SS` form. A JS `toISOString()` is lexicographically
@@ -114,8 +123,8 @@ function recordAlertAttempt(
         eq(alerts.source, input.source),
         eq(alerts.channel, input.channel),
         eq(alerts.level, input.level),
-        gte(alerts.createdAt, cutoff)
-      )
+        gte(alerts.createdAt, cutoff),
+      ),
     )
     .limit(1)
     .all();
@@ -126,7 +135,12 @@ function channelsForDomain(domainId: number, db: DB): AlertChannel[] {
   return db
     .select()
     .from(alertChannels)
-    .where(and(eq(alertChannels.domainId, domainId), eq(alertChannels.enabled, true)))
+    .where(
+      and(
+        eq(alertChannels.domainId, domainId),
+        eq(alertChannels.enabled, true),
+      ),
+    )
     .all();
 }
 
@@ -139,7 +153,12 @@ function defaultEmailChannel(domainId: number, db: DB): AlertChannel | null {
   const existing = db
     .select()
     .from(alertChannels)
-    .where(and(eq(alertChannels.domainId, domainId), eq(alertChannels.channel, "email")))
+    .where(
+      and(
+        eq(alertChannels.domainId, domainId),
+        eq(alertChannels.channel, "email"),
+      ),
+    )
     .limit(1)
     .all()[0];
   if (existing) return existing.enabled ? existing : null;
@@ -163,10 +182,10 @@ function buildAlertText(
   domain: { hostname: string; port: number },
   level: AlertLevelInfo,
   daysRemaining: number,
-  checkId: number
+  checkId: number,
 ): string {
   const lines: string[] = [
-    `SSLert ${source === "domain" ? "Domain" : "SSL"} Alert`,
+    `Bamdad Alert ${source === "domain" ? "Domain" : "SSL"} Alert`,
     ``,
     `Domain: ${domain.hostname}:${domain.port}`,
     source === "domain"
@@ -182,9 +201,10 @@ function buildAlertText(
 function buildAlertSubject(
   source: AlertSource,
   domain: { hostname: string },
-  level: AlertLevelInfo
+  level: AlertLevelInfo,
 ): string {
-  const prefix = source === "domain" ? SUBJECT_PREFIX_DOMAIN : SUBJECT_PREFIX_CERT;
+  const prefix =
+    source === "domain" ? SUBJECT_PREFIX_DOMAIN : SUBJECT_PREFIX_CERT;
   return `${prefix} ${domain.hostname}: ${level.subject}`;
 }
 
@@ -195,11 +215,13 @@ async function dispatchOne(
   daysRemaining: number,
   checkId: number,
   domainId: number,
-  db: DB
+  db: DB,
 ): Promise<ChannelDispatchResult[]> {
   const results: ChannelDispatchResult[] = [];
   // Build the dispatch list: per-domain channels + default email if none set.
-  const explicit = channelsForDomain(domainId, db).filter((c) => c.channel !== "email");
+  const explicit = channelsForDomain(domainId, db).filter(
+    (c) => c.channel !== "email",
+  );
   const defaultEmail = defaultEmailChannel(domainId, db);
   const dispatchList: AlertChannel[] = [...explicit];
   if (defaultEmail) dispatchList.push(defaultEmail);
@@ -250,7 +272,8 @@ async function dispatchOne(
         }
         let pendingId: number | undefined;
         try {
-          const inserted = tx.insert(alerts)
+          const inserted = tx
+            .insert(alerts)
             .values({
               domainId,
               checkId,
@@ -268,13 +291,20 @@ async function dispatchOne(
         return { isNew: true, pendingId };
       });
       if (!claim.isNew) {
-        results.push({ channel: channelName, source, level: level.level, status: "deduped" });
+        results.push({
+          channel: channelName,
+          source,
+          level: level.level,
+          status: "deduped",
+        });
         recordAlertOutcome(channelName, source, "deduped");
         return;
       }
       let cfg: Record<string, unknown> = {};
       try {
-        cfg = ch.config ? (JSON.parse(ch.config) as Record<string, unknown>) : {};
+        cfg = ch.config
+          ? (JSON.parse(ch.config) as Record<string, unknown>)
+          : {};
       } catch {
         cfg = {};
       }
@@ -287,15 +317,25 @@ async function dispatchOne(
           ntfy: "topic",
         };
         const requiredKey = requiredKeys[channelName];
-        if (requiredKey && (cfg[requiredKey] === undefined || cfg[requiredKey] === null || cfg[requiredKey] === "")) {
+        if (
+          requiredKey &&
+          (cfg[requiredKey] === undefined ||
+            cfg[requiredKey] === null ||
+            cfg[requiredKey] === "")
+        ) {
           results.push({
-            channel: channelName, source, level: level.level,
+            channel: channelName,
+            source,
+            level: level.level,
             status: "skipped",
             error: `Missing required config: ${requiredKey}`,
           });
           recordAlertRow(db, {
-            domainId, checkId, source,
-            channel: channelName, level: level.level,
+            domainId,
+            checkId,
+            source,
+            channel: channelName,
+            level: level.level,
             status: "skipped",
             error: `Missing required config: ${requiredKey}`,
             pendingId: claim.pendingId,
@@ -303,12 +343,19 @@ async function dispatchOne(
           return;
         }
       }
-      const localizedContent = channelName === "email" || channelName === "telegram"
-        ? localizeAlert(content, cfg.language, checkId)
-        : content;
+      const localizedContent =
+        channelName === "email" || channelName === "telegram"
+          ? localizeAlert(content, cfg.language, checkId)
+          : content;
       const sendRes = await sender.send(localizedContent, cfg, process.env);
       if (sendRes.error) {
-        results.push({ channel: channelName, source, level: level.level, status: "failed", error: sendRes.error });
+        results.push({
+          channel: channelName,
+          source,
+          level: level.level,
+          status: "failed",
+          error: sendRes.error,
+        });
         recordAlertRow(db, {
           domainId,
           checkId,
@@ -320,7 +367,13 @@ async function dispatchOne(
           pendingId: claim.pendingId,
         });
       } else {
-        results.push({ channel: channelName, source, level: level.level, status: "sent", messageId: sendRes.id });
+        results.push({
+          channel: channelName,
+          source,
+          level: level.level,
+          status: "sent",
+          messageId: sendRes.id,
+        });
         recordAlertRow(db, {
           domainId,
           checkId,
@@ -332,7 +385,7 @@ async function dispatchOne(
           pendingId: claim.pendingId,
         });
       }
-    })
+    }),
   );
   return results;
 }
@@ -372,10 +425,7 @@ function recordAlertRow(db: DB, input: RecordAlertRowInput): void {
       db.update(alerts)
         .set({
           status: input.status,
-          sentAt:
-            input.status === "sent"
-              ? new Date().toISOString()
-              : null,
+          sentAt: input.status === "sent" ? new Date().toISOString() : null,
           error: input.error ?? null,
         })
         .where(eq(alerts.id, input.pendingId))
@@ -406,7 +456,7 @@ function recordAlertRow(db: DB, input: RecordAlertRowInput): void {
  *   - domain expiry (source = "domain")
  */
 export async function processCheckAlert(
-  input: ProcessCheckAlertInput
+  input: ProcessCheckAlertInput,
 ): Promise<ProcessCheckAlertOutput> {
   const db = input.db ?? getDb();
   const domain = db
@@ -417,10 +467,31 @@ export async function processCheckAlert(
     .all()[0];
   if (!domain) return { cert: null, domain: null };
 
+  if (centralEnabled(db)) {
+    await dispatchExpiry(
+      db,
+      `domain:${domain.id}`,
+      "cert",
+      domain.hostname,
+      input.certDaysRemaining,
+    );
+    await dispatchExpiry(
+      db,
+      `domain:${domain.id}`,
+      "domain",
+      domain.hostname,
+      input.domainDaysRemaining,
+    );
+    return { cert: null, domain: null };
+  }
   const out: ProcessCheckAlertOutput = { cert: null, domain: null };
 
   const certLevel = determineAlertLevel(input.certDaysRemaining);
-  if (certLevel && input.certDaysRemaining !== null && input.certDaysRemaining !== undefined) {
+  if (
+    certLevel &&
+    input.certDaysRemaining !== null &&
+    input.certDaysRemaining !== undefined
+  ) {
     out.cert = await dispatchOne(
       "cert",
       { hostname: domain.hostname, port: domain.port },
@@ -428,12 +499,16 @@ export async function processCheckAlert(
       input.certDaysRemaining,
       input.checkId,
       input.domainId,
-      db
+      db,
     );
   }
 
   const domainLevel = determineAlertLevel(input.domainDaysRemaining);
-  if (domainLevel && input.domainDaysRemaining !== null && input.domainDaysRemaining !== undefined) {
+  if (
+    domainLevel &&
+    input.domainDaysRemaining !== null &&
+    input.domainDaysRemaining !== undefined
+  ) {
     out.domain = await dispatchOne(
       "domain",
       { hostname: domain.hostname, port: domain.port },
@@ -441,7 +516,7 @@ export async function processCheckAlert(
       input.domainDaysRemaining,
       input.checkId,
       input.domainId,
-      db
+      db,
     );
   }
 
@@ -452,9 +527,14 @@ export async function processCheckAlert(
 export async function runAlertForCheck(
   checkId: number,
   domainId: number,
-  daysRemaining: number | null
+  daysRemaining: number | null,
 ): Promise<ChannelDispatchResult[] | null> {
-  const out = await processCheckAlert({ checkId, domainId, certDaysRemaining: daysRemaining, domainDaysRemaining: null });
+  const out = await processCheckAlert({
+    checkId,
+    domainId,
+    certDaysRemaining: daysRemaining,
+    domainDaysRemaining: null,
+  });
   return out.cert;
 }
 

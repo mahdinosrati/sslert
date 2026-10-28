@@ -33,3 +33,10 @@ landing/node_modules
 # OS junk
 .DS_Store
 Thumbs.db
+
+.env
+.env.*
+!.env.example
+data
+**/data
+
