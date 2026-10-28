@@ -1,3 +1,4 @@
+import { useI18n, formatNumber, errorMessage } from "../lib/i18n";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
@@ -10,6 +11,7 @@ import {
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { formatDate } from "../lib/format";
 
 const PAGE_SIZE = 50;
 
@@ -32,6 +34,7 @@ function actionBadgeClass(action: string): string {
 }
 
 export function AuditLog() {
+  const { t } = useI18n();
   const [action, setAction] = React.useState("");
   const [actorType, setActorType] = React.useState("");
   const [resourceType, setResourceType] = React.useState("");
@@ -76,12 +79,8 @@ export function AuditLog() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-            Audit log
-          </h1>
-          <p className="text-sm text-slate-500">
-            Who did what, and when. Newest first.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t("Audit log")}</h1>
+          <p className="text-sm text-slate-500">{t("Who did what, and when. Newest first.")}</p>
         </div>
         <Button
           variant="ghost"
@@ -89,14 +88,12 @@ export function AuditLog() {
           onClick={() => query.refetch()}
           disabled={query.isFetching}
         >
-          <RefreshCw className="mr-1 h-4 w-4" />
-          Refresh
-        </Button>
+          <RefreshCw className="me-1 h-4 w-4" />{t("Refresh")}</Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Filters</CardTitle>
+          <CardTitle>{t("Filters")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-5">
@@ -104,11 +101,10 @@ export function AuditLog() {
               <label
                 htmlFor="audit-filter-action"
                 className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500"
-              >
-                Action
-              </label>
+              >{t("Action")}</label>
               <Input
                 id="audit-filter-action"
+                dir="ltr"
                 placeholder="domain.% or channel.create"
                 value={action}
                 onChange={(e) => setAction(e.target.value)}
@@ -118,30 +114,27 @@ export function AuditLog() {
               <label
                 htmlFor="audit-filter-actor"
                 className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500"
-              >
-                Actor
-              </label>
+              >{t("Actor")}</label>
               <select
                 id="audit-filter-actor"
                 className="block w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm text-slate-900"
                 value={actorType}
                 onChange={(e) => setActorType(e.target.value)}
               >
-                <option value="">All</option>
-                <option value="user">user</option>
-                <option value="api_token">api_token</option>
-                <option value="system">system</option>
+                <option value="">{t("All")}</option>
+                <option value="user">{t("user")}</option>
+                <option value="api_token">{t("api_token")}</option>
+                <option value="system">{t("system")}</option>
               </select>
             </div>
             <div>
               <label
                 htmlFor="audit-filter-resource"
                 className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500"
-              >
-                Resource
-              </label>
+              >{t("Resource")}</label>
               <Input
                 id="audit-filter-resource"
+                dir="ltr"
                 placeholder="domain | channel | token"
                 value={resourceType}
                 onChange={(e) => setResourceType(e.target.value)}
@@ -151,11 +144,10 @@ export function AuditLog() {
               <label
                 htmlFor="audit-filter-since"
                 className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500"
-              >
-                Since
-              </label>
+              >{t("Since")}</label>
               <Input
                 id="audit-filter-since"
+                dir="ltr"
                 type="date"
                 value={since}
                 onChange={(e) => setSince(e.target.value)}
@@ -165,11 +157,10 @@ export function AuditLog() {
               <label
                 htmlFor="audit-filter-until"
                 className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500"
-              >
-                Until
-              </label>
+              >{t("Until")}</label>
               <Input
                 id="audit-filter-until"
+                dir="ltr"
                 type="date"
                 value={until}
                 onChange={(e) => setUntil(e.target.value)}
@@ -182,25 +173,22 @@ export function AuditLog() {
       <Card>
         <CardContent className="p-0">
           {query.isLoading ? (
-            <div className="p-6 text-sm text-slate-500">Loading…</div>
+            <div className="p-6 text-sm text-slate-500">{t("Loading…")}</div>
           ) : query.isError ? (
-            <div className="p-6 text-sm text-rose-700">
-              Failed to load: {String(query.error)}
+            <div className="p-6 text-sm text-rose-700">{t("Failed to load:")}{" "}{errorMessage(query.error)}
             </div>
           ) : rows.length === 0 ? (
-            <div className="p-6 text-sm text-slate-500">
-              No audit entries match the current filters.
-            </div>
+            <div className="p-6 text-sm text-slate-500">{t("No audit entries match the current filters.")}</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <thead className="border-b border-slate-200 bg-slate-50 text-start text-xs font-medium uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-4 py-2">When</th>
-                    <th className="px-4 py-2">Actor</th>
-                    <th className="px-4 py-2">Action</th>
-                    <th className="px-4 py-2">Resource</th>
-                    <th className="px-4 py-2">Metadata</th>
+                    <th className="px-4 py-2">{t("When")}</th>
+                    <th className="px-4 py-2">{t("Actor")}</th>
+                    <th className="px-4 py-2">{t("Action")}</th>
+                    <th className="px-4 py-2">{t("Resource")}</th>
+                    <th className="px-4 py-2">{t("Metadata")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -210,12 +198,12 @@ export function AuditLog() {
                       className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
                     >
                       <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-slate-600">
-                        {fmtTime(r.timestamp)}
+                        {formatDate(r.timestamp)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-2 text-slate-700">
-                        {r.actorType}
+                        {t(r.actorType)}
                         {r.actorId ? (
-                          <span className="ml-1 text-slate-400">
+                          <span className="ms-1 text-slate-400">
                             ({r.actorId})
                           </span>
                         ) : null}
@@ -226,19 +214,19 @@ export function AuditLog() {
                             r.action
                           )}`}
                         >
-                          {r.action}
+                          <bdi dir="ltr">{r.action}</bdi>
                         </span>
                       </td>
                       <td className="px-4 py-2 text-slate-700">
-                        {r.resourceType}
+                        <bdi dir="ltr">{r.resourceType}</bdi>
                         {r.resourceId ? (
-                          <span className="ml-1 text-slate-400">
+                          <span className="ms-1 text-slate-400">
                             ({r.resourceId})
                           </span>
                         ) : null}
                       </td>
                       <td className="max-w-xs truncate px-4 py-2 font-mono text-xs text-slate-500">
-                        {r.metadata ? JSON.stringify(r.metadata) : "—"}
+                        <bdi dir="ltr">{r.metadata ? JSON.stringify(r.metadata) : "—"}</bdi>
                       </td>
                     </tr>
                   ))}
@@ -252,11 +240,12 @@ export function AuditLog() {
       <div className="flex items-center justify-between text-sm text-slate-600">
         <span>
           {total === 0
-            ? "No entries"
-            : `Showing ${offset + 1}–${Math.min(
-                offset + PAGE_SIZE,
-                total
-              )} of ${total}`}
+            ? t("No entries")
+            : t("Showing {start}–{end} of {total}", {
+                start: formatNumber(offset + 1),
+                end: formatNumber(Math.min(offset + PAGE_SIZE, total)),
+                total: formatNumber(total),
+              })}
         </span>
         <div className="flex items-center gap-2">
           <Button
@@ -265,20 +254,16 @@ export function AuditLog() {
             disabled={offset === 0}
             onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
           >
-            <ChevronLeft className="mr-1 h-4 w-4" />
-            Prev
-          </Button>
+            <ChevronLeft className="me-1 h-4 w-4" />{t("Prev")}</Button>
           <span className="text-xs text-slate-500">
-            Page {page} / {totalPages}
+            {t("Page {page} / {total}", { page: formatNumber(page), total: formatNumber(totalPages) })}
           </span>
           <Button
             variant="ghost"
             size="sm"
             disabled={offset + PAGE_SIZE >= total}
             onClick={() => setOffset(offset + PAGE_SIZE)}
-          >
-            Next
-            <ChevronRight className="ml-1 h-4 w-4" />
+          >{t("Next")}<ChevronRight className="ms-1 h-4 w-4" />
           </Button>
         </div>
       </div>

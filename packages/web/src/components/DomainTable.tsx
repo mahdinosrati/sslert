@@ -1,3 +1,4 @@
+import { useI18n, formatNumber } from "../lib/i18n";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw, Trash2, Loader2, Globe, AlertCircle } from "lucide-react";
 import {
@@ -17,6 +18,7 @@ import { certErrorTitle } from "../lib/cert-errors";
 import { humanizeCertError } from "../lib/cert-errors";
 
 export function DomainTable({ rows }: { rows: DomainRow[] }) {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -38,9 +40,7 @@ export function DomainTable({ rows }: { rows: DomainRow[] }) {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-12 text-center text-sm text-slate-500">
-        No domains yet. Click <span className="font-medium">+ Add</span> to start monitoring.
-      </div>
+      <div className="rounded-lg border border-dashed border-slate-300 p-12 text-center text-sm text-slate-500">{t("No domains yet. Click")}{" "}<span className="font-medium">{t("+ Add")}</span>{" "}{t("to start monitoring.")}</div>
     );
   }
 
@@ -48,13 +48,13 @@ export function DomainTable({ rows }: { rows: DomainRow[] }) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Domain</TableHead>
-          <TableHead>Issuer</TableHead>
-          <TableHead className="text-right">Cert Days</TableHead>
-          <TableHead className="text-right">Domain Days</TableHead>
-          <TableHead>Last Check</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          <TableHead>{t("Domain")}</TableHead>
+          <TableHead>{t("Issuer")}</TableHead>
+          <TableHead className="text-end">{t("Cert Days")}</TableHead>
+          <TableHead className="text-end">{t("Domain Days")}</TableHead>
+          <TableHead>{t("Last Check")}</TableHead>
+          <TableHead>{t("Status")}</TableHead>
+          <TableHead className="text-end">{t("Actions")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -67,23 +67,23 @@ export function DomainTable({ rows }: { rows: DomainRow[] }) {
               className="cursor-pointer"
               onClick={() => navigate(`/domains/${domain.id}`)}
             >
-              <TableCell className="font-mono text-slate-900">
+              <TableCell dir="ltr" className="font-mono text-slate-900">
                 {domain.hostname}
-                <span className="ml-1 text-slate-400">:{domain.port}</span>
+                <span className="ms-1 text-slate-400">:{domain.port}</span>
               </TableCell>
               <TableCell>
                 {lastCheck?.issuerOrg ?? lastCheck?.issuer ?? "—"}
               </TableCell>
-              <TableCell className="text-right font-mono">
-                {days === null || days === undefined ? "—" : days}
+              <TableCell className="text-end font-mono">
+                {days === null || days === undefined ? "—" : formatNumber(days)}
               </TableCell>
-              <TableCell className="text-right font-mono">
+              <TableCell className="text-end font-mono">
                 {domainDays === null || domainDays === undefined ? (
                   <span className="text-slate-400">—</span>
                 ) : (
                   <span className="inline-flex items-center gap-1">
                     <Globe className="h-3 w-3 text-slate-400" />
-                    {domainDays}
+                    {formatNumber(domainDays)}
                   </span>
                 )}
               </TableCell>
@@ -103,14 +103,14 @@ export function DomainTable({ rows }: { rows: DomainRow[] }) {
                 {lastCheck?.valid === false && lastCheck.error && (
                   <span
                     title={certErrorTitle(lastCheck.error)}
-                    className="ml-1 inline-flex items-center gap-1 text-xs text-rose-600"
+                    className="ms-1 inline-flex items-center gap-1 text-xs text-rose-600"
                   >
                     <AlertCircle className="h-3 w-3" />
                     {certErrorTitle(lastCheck.error)}
                   </span>
                 )}
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-end">
                 <div
                   className="flex justify-end gap-1"
                   onClick={(e) => e.stopPropagation()}
@@ -118,7 +118,7 @@ export function DomainTable({ rows }: { rows: DomainRow[] }) {
                   <Button
                     size="icon"
                     variant="ghost"
-                    title="Check now"
+                    title={t("Check now")}
                     disabled={checkMutation.isPending}
                     onClick={() => checkMutation.mutate(domain.id)}
                   >
@@ -132,9 +132,9 @@ export function DomainTable({ rows }: { rows: DomainRow[] }) {
                   <Button
                     size="icon"
                     variant="ghost"
-                    title="Delete"
+                    title={t("Delete")}
                     onClick={() => {
-                      if (confirm(`Remove ${domain.hostname}?`)) {
+                      if (confirm(t("Remove {hostname}?", { hostname: domain.hostname }))) {
                         deleteMutation.mutate(domain.id);
                       }
                     }}

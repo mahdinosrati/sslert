@@ -30,6 +30,18 @@ SSLert fills the gap.
 - **Self-hosted** — one `docker compose up`, data in SQLite, zero external dependencies
 - **Prometheus metrics** — built-in `/metrics` endpoint with a ready-to-import Grafana dashboard
 - **Backup & restore** — single `.tar.gz` archive with secret redaction
+- **English / فارسی UI** — English by default, with a saved language preference, Persian RTL layout, bundled Vazir font, and Persian-calendar display dates.
+
+### Interface language
+
+Use the language selector on the sign-in page or in the panel header to switch between English and فارسی. The choice is saved in your browser. Persian mode uses locally bundled Vazir fonts and Persian-calendar display dates; domain names, tokens and API values keep their original representation. Audit date filters still accept Gregorian dates and use UTC boundaries. Email/Telegram alert messages and server logs are not affected by the interface language.
+
+The UI localization smoke tests run without a database, using API fixtures:
+
+```bash
+npx playwright install chromium
+npm run test:i18n --workspace=@sslert/web
+```
 
 ## 🚀 Quickstart (Docker)
 

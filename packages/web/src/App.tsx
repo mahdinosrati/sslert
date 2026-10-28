@@ -1,3 +1,4 @@
+import { useI18n } from "./lib/i18n";
 import * as React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { ShieldCheck, LogOut } from "lucide-react";
@@ -9,8 +10,10 @@ import { AuditLog } from "./pages/AuditLog";
 import Login from "./pages/Login";
 import { RequireAuth } from "./components/RequireAuth";
 import { clearApiToken, getApiToken } from "./lib/api";
+import { LanguageSwitcher } from "./components/LanguageSwitcher";
 
 export default function App() {
+  const { t, language } = useI18n();
   const [addOpen, setAddOpen] = React.useState(false);
   const location = useLocation();
   const [hasToken, setHasToken] = React.useState<boolean>(() => Boolean(getApiToken()));
@@ -26,42 +29,40 @@ export default function App() {
     };
   }, []);
   const isLoginRoute = location.pathname === "/login";
+  React.useEffect(() => {
+    document.title = t(isLoginRoute ? "Sign in · SSLert" : "SSLert - SSL Expiry Monitor");
+  }, [isLoginRoute, language, t]);
   return (
     <div className="min-h-full">
       {!isLoginRoute && (
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
             <Link to="/" className="flex items-center gap-2 text-slate-900">
               <ShieldCheck className="h-6 w-6 text-sky-600" />
               <span className="text-lg font-semibold">SSLert</span>
             </Link>
-            <nav className="flex items-center gap-2">
+            <nav className="flex flex-wrap items-center gap-2">
+              <LanguageSwitcher />
               <Link to="/">
                 <Button
                   variant={location.pathname === "/" ? "secondary" : "ghost"}
                   size="sm"
-                >
-                  Dashboard
-                </Button>
+                >{t("Dashboard")}</Button>
               </Link>
               <Link to="/audit">
                 <Button
                   variant={location.pathname === "/audit" ? "secondary" : "ghost"}
                   size="sm"
-                >
-                  Audit
-                </Button>
+                >{t("Audit")}</Button>
               </Link>
-              <Button size="sm" onClick={() => setAddOpen(true)}>
-                + Add
-              </Button>
+              <Button size="sm" onClick={() => setAddOpen(true)}>{t("+ Add")}</Button>
               {hasToken && (
                 <Button
                   size="sm"
                   variant="ghost"
                   data-testid="signout-button"
                   onClick={() => clearApiToken()}
-                  title="Clear stored token"
+                  title={t("Clear stored token")}
                 >
                   <LogOut className="h-4 w-4" />
                 </Button>
@@ -101,15 +102,14 @@ export default function App() {
         </Routes>
       </main>
       {!isLoginRoute && (
-        <footer className="border-t border-slate-200 px-6 py-4 text-center text-sm text-slate-500" dir="rtl" lang="fa">
-          این پنل توسط{" "}
+        <footer className="border-t border-slate-200 px-6 py-4 text-center text-sm text-slate-500">
+          {t("This panel was developed by")}{" "}
           <a
             href="https://github.com/mahdinosrati"
             className="font-medium text-sky-700 hover:underline"
           >
             <bdi>MahdiNosrati</bdi>
-          </a>{" "}
-          توسعه داده شده است.
+          </a>
         </footer>
       )}
       {!isLoginRoute && (

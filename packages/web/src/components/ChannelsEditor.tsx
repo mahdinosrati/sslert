@@ -1,3 +1,4 @@
+import { useI18n, t, errorMessage } from "../lib/i18n";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Loader2, Mail, Webhook, Send, MessageSquare, Bell } from "lucide-react";
@@ -59,6 +60,7 @@ function ConfigForm({
   onCancel: () => void;
   isPending: boolean;
 }) {
+  const { t } = useI18n();
   const fields = CHANNEL_FIELDS[channel];
   const [values, setValues] = useState<Record<string, string>>(() => {
     const out: Record<string, string> = {};
@@ -84,22 +86,21 @@ function ConfigForm({
     >
       {fields.map((f) => (
         <label key={f.key} className="block text-xs text-slate-600">
-          <span className="mb-1 block font-medium text-slate-700">{f.label}</span>
+          <span className="mb-1 block font-medium text-slate-700">{t(f.label)}</span>
           <Input
             type={f.type ?? "text"}
             value={values[f.key] ?? ""}
-            placeholder={f.placeholder}
+            placeholder={f.placeholder ? t(f.placeholder) : undefined}
+            dir="ltr"
             onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
             className="h-8 text-sm"
           />
         </label>
       ))}
       <div className="flex justify-end gap-2 pt-1">
-        <Button type="button" size="sm" variant="ghost" onClick={onCancel} disabled={isPending}>
-          Cancel
-        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel} disabled={isPending}>{t("Cancel")}</Button>
         <Button type="submit" size="sm" disabled={isPending}>
-          {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+          {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : t("Save")}
         </Button>
       </div>
     </form>
@@ -107,6 +108,7 @@ function ConfigForm({
 }
 
 export function ChannelsEditor({ domainId }: { domainId: number }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const channels = useQuery({
     queryKey: ["channels", domainId],
@@ -135,16 +137,14 @@ export function ChannelsEditor({ domainId }: { domainId: number }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Alert Channels</CardTitle>
+        <CardTitle>{t("Alert Channels")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {channels.isLoading && (
-          <p className="text-sm text-slate-500">Loading…</p>
+          <p className="text-sm text-slate-500">{t("Loading…")}</p>
         )}
         {channels.data?.channels.length === 0 && (
-          <p className="text-sm text-slate-500">
-            No alert channels configured. Add one below.
-          </p>
+          <p className="text-sm text-slate-500">{t("No alert channels configured. Add one below.")}</p>
         )}
         <ul className="space-y-2">
           {channels.data?.channels.map((c) => (
@@ -155,22 +155,20 @@ export function ChannelsEditor({ domainId }: { domainId: number }) {
               <div className="flex items-center gap-2">
                 {CHANNEL_ICONS[c.channel]}
                 <span className="font-medium text-slate-900">
-                  {CHANNEL_LABELS[c.channel]}
+                  {t(CHANNEL_LABELS[c.channel])}
                 </span>
-                <span className="text-slate-500">
+                <span dir="auto" className="break-all text-slate-500">
                   {describeConfig(c)}
                 </span>
                 {!c.enabled && (
-                  <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700">
-                    disabled
-                  </span>
+                  <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700">{t("disabled")}</span>
                 )}
               </div>
               {c.id !== 0 && (
                 <Button
                   size="icon"
                   variant="ghost"
-                  title="Remove channel"
+                  title={t("Remove channel")}
                   onClick={() => remove.mutate(c.id)}
                   disabled={remove.isPending}
                 >
@@ -201,7 +199,7 @@ export function ChannelsEditor({ domainId }: { domainId: number }) {
                     onClick={() => setEditing(k)}
                   >
                     <Plus className="h-3 w-3" />
-                    {CHANNEL_LABELS[k]}
+                    {t(CHANNEL_LABELS[k])}
                   </Button>
                 ))}
               </div>
@@ -209,20 +207,11 @@ export function ChannelsEditor({ domainId }: { domainId: number }) {
           </div>
         )}
         {upsert.error && (
-          <p className="text-xs text-rose-600">
-            Failed to save: {(upsert.error as Error).message}
+          <p className="text-xs text-rose-600">{t("Failed to save:")}{" "}{errorMessage(upsert.error)}
           </p>
         )}
-        <p className="pt-1 text-xs text-slate-500">
-          Email falls back to console logging when no <code>RESEND_API_KEY</code> is set.
-          {" "}
-          The global <code>ALERT_EMAIL_TO</code> also creates a synthetic default-email
-          channel per domain.
-          {" "}
-          For generic webhooks, set a signing secret (16+ chars) to add
-          {" "}
-          <code>X-SSLert-Signature: sha256=…</code> + timestamp headers to deliveries.
-        </p>
+        <p className="pt-1 text-xs text-slate-500">{t("Email falls back to console logging when no")}{" "}<code>RESEND_API_KEY</code>{" "}{t("is set.")}{" "}{t("The global")}{" "}<code>ALERT_EMAIL_TO</code>{" "}{t("also creates a synthetic default-email channel per domain.")}{" "}{t("For generic webhooks, set a signing secret (16+ chars) to add")}{" "}
+          <code>X-SSLert-Signature: sha256=…</code>{" "}{t("+ timestamp headers to deliveries.")}</p>
       </CardContent>
     </Card>
   );
@@ -239,14 +228,14 @@ function describeConfig(c: AlertChannel): string {
   };
   switch (c.channel) {
     case "email":
-      return getStr("to") ? `→ ${getStr("to")}` : "default recipient";
+      return getStr("to") ? `→ ${getStr("to")}` : t("default recipient");
     case "webhook":
-      return getStr("url") ? `→ ${getStr("url")}` : "no URL";
+      return getStr("url") ? `→ ${getStr("url")}` : t("no URL");
     case "telegram":
-      return getStr("chatId") ? `chat ${getStr("chatId")}` : "no chat id";
+      return getStr("chatId") ? t("chat {id}", { id: getStr("chatId")! }) : t("no chat id");
     case "slack":
-      return getStr("url") ? "configured" : "no URL";
+      return getStr("url") ? t("configured") : t("no URL");
     case "ntfy":
-      return getStr("topic") ? `topic ${getStr("topic")}` : "no topic";
+      return getStr("topic") ? t("topic {topic}", { topic: getStr("topic")! }) : t("no topic");
   }
 }

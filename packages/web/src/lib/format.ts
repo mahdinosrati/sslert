@@ -1,7 +1,19 @@
 import { normalizeIsoForJs } from "./cert-errors";
+import { getLanguage, t } from "./i18n";
 
 export function formatDistanceToNowStrict(date: Date): string {
+  if (Number.isNaN(date.getTime())) return "—";
   const diff = Date.now() - date.getTime();
+  if (getLanguage() === "fa" || diff < 0) {
+    const seconds = (date.getTime() - Date.now()) / 1000;
+    if (Math.abs(seconds) < 5) return t("just now");
+    const magnitude = Math.abs(seconds);
+    const [size, unit]: [number, Intl.RelativeTimeFormatUnit] = magnitude < 60
+      ? [1, "second"] : magnitude < 3600 ? [60, "minute"]
+      : magnitude < 86400 ? [3600, "hour"] : [86400, "day"];
+    const amount = Math.trunc(seconds / size);
+    return new Intl.RelativeTimeFormat(getLanguage() === "fa" ? "fa-IR" : "en-US", { numeric: "always" }).format(amount, unit);
+  }
   const sec = Math.floor(diff / 1000);
   if (sec < 5) return "just now";
   if (sec < 60) return `${sec}s ago`;
@@ -20,7 +32,9 @@ export function formatDate(iso: string | null | undefined): string {
     // but if a stale SQLite-format string slips through (cached
     // payload, older deploys), we still want the date to render in
     // the user's local zone instead of "Invalid Date".
-    return new Date(normalizeIsoForJs(iso)).toLocaleString();
+    const date = new Date(normalizeIsoForJs(iso));
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleString(getLanguage() === "fa" ? "fa-IR-u-ca-persian" : "en-US");
   } catch {
     return iso;
   }

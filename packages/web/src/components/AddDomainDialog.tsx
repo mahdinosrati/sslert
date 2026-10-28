@@ -1,3 +1,4 @@
+import { useI18n, errorMessage } from "../lib/i18n";
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Loader2 } from "lucide-react";
@@ -20,6 +21,7 @@ interface AddDomainDialogProps {
 }
 
 export function AddDomainDialog({ open, onOpenChange, onAdded }: AddDomainDialogProps) {
+  const { t } = useI18n();
   const [hostname, setHostname] = React.useState("");
   const [port, setPort] = React.useState("443");
   const queryClient = useQueryClient();
@@ -48,17 +50,16 @@ export function AddDomainDialog({ open, onOpenChange, onAdded }: AddDomainDialog
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogHeader>
-        <DialogTitle>Add Domain</DialogTitle>
-        <DialogDescription>
-          Add a hostname to monitor. The first SSL check runs immediately.
-        </DialogDescription>
+        <DialogTitle>{t("Add Domain")}</DialogTitle>
+        <DialogDescription>{t("Add a hostname to monitor. The first SSL check runs immediately.")}</DialogDescription>
       </DialogHeader>
       <form onSubmit={onSubmit}>
         <DialogContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="hostname">Hostname</Label>
+            <Label htmlFor="hostname">{t("Hostname")}</Label>
             <Input
               id="hostname"
+              dir="ltr"
               autoFocus
               placeholder="example.com"
               value={hostname}
@@ -67,9 +68,10 @@ export function AddDomainDialog({ open, onOpenChange, onAdded }: AddDomainDialog
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="port">Port</Label>
+            <Label htmlFor="port">{t("Port")}</Label>
             <Input
               id="port"
+              dir="ltr"
               type="number"
               min={1}
               max={65535}
@@ -79,7 +81,7 @@ export function AddDomainDialog({ open, onOpenChange, onAdded }: AddDomainDialog
           </div>
           {mutation.isError && (
             <p className="text-sm text-red-600">
-              {(mutation.error as Error).message}
+              {errorMessage(mutation.error)}
             </p>
           )}
         </DialogContent>
@@ -88,16 +90,14 @@ export function AddDomainDialog({ open, onOpenChange, onAdded }: AddDomainDialog
             type="button"
             variant="ghost"
             onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          >{t("Cancel")}</Button>
           <Button type="submit" disabled={mutation.isPending || !hostname.trim()}>
             {mutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Plus className="h-4 w-4" />
             )}
-            Add &amp; Check Now
+            {t("Add & Check Now")}
           </Button>
         </DialogFooter>
       </form>

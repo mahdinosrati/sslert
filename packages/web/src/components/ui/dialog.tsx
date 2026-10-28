@@ -1,3 +1,4 @@
+import { useI18n } from "../../lib/i18n";
 import * as React from "react";
 import { X } from "lucide-react";
 import { cn } from "../../lib/cn";
@@ -9,6 +10,7 @@ interface DialogProps {
 }
 
 export function Dialog({ open, onOpenChange, children }: DialogProps) {
+  const { t } = useI18n();
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -29,8 +31,8 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
       >
         {children}
         <button
-          aria-label="Close"
-          className="absolute right-3 top-3 rounded-md p-1 text-slate-500 hover:bg-slate-100"
+          aria-label={t("Close")}
+          className="absolute end-3 top-3 rounded-md p-1 text-slate-500 hover:bg-slate-100"
           onClick={() => onOpenChange(false)}
         >
           <X className="h-4 w-4" />

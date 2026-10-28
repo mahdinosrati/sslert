@@ -1,5 +1,30 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Vazir";
+  src: url("/fonts/vazir/Vazir-Regular.woff2") format("woff2");
+  font-weight: 100 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Vazir";
+  src: url("/fonts/vazir/Vazir-Bold.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+html[lang="fa"] body {
+  font-family: "Vazir", Tahoma, sans-serif;
+}
+
+code { direction: ltr; unicode-bidi: isolate; }
+html[dir="rtl"] .lucide-arrow-left,
+html[dir="rtl"] .lucide-chevron-left,
+html[dir="rtl"] .lucide-chevron-right { transform: scaleX(-1); }
+
 @theme {
   --color-brand-50: #f0f9ff;
   --color-brand-500: #0ea5e9;

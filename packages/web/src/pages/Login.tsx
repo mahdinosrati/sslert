@@ -1,3 +1,4 @@
+import { useI18n, errorMessage } from "../lib/i18n";
 import * as React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ShieldCheck, AlertCircle } from "lucide-react";
@@ -5,11 +6,13 @@ import { Button } from "../components/ui/button";
 import { Input, Label } from "../components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
 import { setApiToken, api, ApiError } from "../lib/api";
+import { LanguageSwitcher } from "../components/LanguageSwitcher";
 
 // Login page. Accepts an API token, writes it to localStorage, probes
 // /api/domains to confirm the token is valid, then redirects. Token
 // storage: localStorage (not a cookie); nginx forwards Authorization.
 export default function Login() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
   const [token, setToken] = React.useState("");
@@ -17,10 +20,6 @@ export default function Login() {
   const [error, setError] = React.useState<string | null>(null);
 
   const from = (location.state as { from?: string } | null)?.from ?? "/";
-
-  React.useEffect(() => {
-    document.title = "Sign in · SSLert";
-  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,24 +53,25 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
       <Card className="w-full max-w-md">
+        <div className="flex justify-end px-6 pt-4"><LanguageSwitcher /></div>
         <CardHeader>
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-6 w-6 text-sky-600" />
-            <CardTitle className="text-lg">Sign in to SSLert</CardTitle>
+            <CardTitle className="text-lg">{t("Sign in to SSLert")}</CardTitle>
           </div>
-          <p className="text-sm text-slate-500">
-            Paste an API token created with{" "}
-            <code className="rounded bg-slate-100 px-1">sslert token create</code>.
+          <p className="text-sm text-slate-500">{t("Paste an API token created with")}{" "}
+            <code dir="ltr" className="inline-block break-all rounded bg-slate-100 px-1">node /app/dist/cli/tokens.js create --label admin</code>
           </p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4" data-testid="login-form">
             <div className="space-y-1.5">
-              <Label htmlFor="token">API token</Label>
+              <Label htmlFor="token">{t("API token")}</Label>
               <Input
                 id="token"
                 name="token"
                 type="password"
+                dir="ltr"
                 autoComplete="off"
                 autoFocus
                 placeholder="cp_…"
@@ -88,7 +88,7 @@ export default function Login() {
                 className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
               >
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{error}</span>
+                <span>{errorMessage(error)}</span>
               </div>
             )}
             <Button
@@ -97,7 +97,7 @@ export default function Login() {
               disabled={submitting || !token.trim()}
               data-testid="login-submit"
             >
-              {submitting ? "Verifying…" : "Sign in"}
+              {submitting ? t("Verifying…") : t("Sign in")}
             </Button>
           </form>
         </CardContent>

@@ -1,3 +1,4 @@
+import { useI18n, formatNumber, errorMessage } from "../lib/i18n";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import {
@@ -30,6 +31,7 @@ import { formatDate, formatDistanceToNowStrict } from "../lib/format";
 import { certErrorTitle, certErrorDescription } from "../lib/cert-errors";
 
 export function DomainDetail() {
+  const { t } = useI18n();
   const { id } = useParams<{ id: string }>();
   const domainId = parseInt(id ?? "0", 10);
   const navigate = useNavigate();
@@ -61,17 +63,16 @@ export function DomainDetail() {
 
   if (detail.isLoading) {
     return (
-      <p className="py-8 text-center text-sm text-slate-500">Loading…</p>
+      <p className="py-8 text-center text-sm text-slate-500">{t("Loading…")}</p>
     );
   }
   if (detail.isError) {
     return (
       <div className="space-y-4">
         <Link to="/" className="inline-flex items-center gap-1 text-sm text-sky-600">
-          <ArrowLeft className="h-4 w-4" /> Back to dashboard
-        </Link>
+          <ArrowLeft className="h-4 w-4" />{t("Back to dashboard")}</Link>
         <p className="text-sm text-red-600">
-          {(detail.error as Error).message}
+          {errorMessage(detail.error)}
         </p>
       </div>
     );
@@ -84,13 +85,12 @@ export function DomainDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
           to="/"
           className="inline-flex items-center gap-1 text-sm text-sky-600"
         >
-          <ArrowLeft className="h-4 w-4" /> Dashboard
-        </Link>
+          <ArrowLeft className="h-4 w-4" />{t("Dashboard")}</Link>
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -102,47 +102,44 @@ export function DomainDetail() {
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <RefreshCw className="h-4 w-4" />
-            )}
-            Check Now
-          </Button>
+            )}{t("Check Now")}</Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
-              if (confirm(`Remove ${domain.hostname}?`)) {
+              if (confirm(t("Remove {hostname}?", { hostname: domain.hostname }))) {
                 deleteMutation.mutate();
               }
             }}
           >
-            <Trash2 className="h-4 w-4 text-rose-500" /> Delete
-          </Button>
+            <Trash2 className="h-4 w-4 text-rose-500" />{t("Delete")}</Button>
         </div>
       </div>
 
       <div className="flex items-center gap-3">
         <ShieldCheck className="h-8 w-8 text-sky-600" />
         <div>
-          <h1 className="font-mono text-2xl font-semibold text-slate-900">
+          <h1 dir="ltr" className="break-all font-mono text-2xl font-semibold text-slate-900">
             {domain.hostname}
-            <span className="ml-1 text-slate-400">:{domain.port}</span>
+            <span className="ms-1 text-slate-400">:{domain.port}</span>
           </h1>
-          <div className="mt-1 flex items-center gap-3 text-sm text-slate-500">
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-slate-500">
             <span className="flex items-center gap-1">
               <StatusBadge daysRemaining={days} />
               <span>
                 {days === null || days === undefined
-                  ? "Cert never checked"
+                  ? t("Cert never checked")
                   : days > 0
-                  ? `${days} days remaining`
-                  : "Cert expired"}
+                  ? t("{days} days remaining", { days: formatNumber(days) })
+                  : t("Cert expired")}
               </span>
             </span>
             {domainDays !== null && domainDays !== undefined && (
               <span className="flex items-center gap-1">
                 <Globe className="h-3 w-3 text-slate-400" />
                 {domainDays > 0
-                  ? `Domain expires in ${domainDays} days`
-                  : "Domain expired"}
+                  ? t("Domain expires in {days} days", { days: formatNumber(domainDays) })
+                  : t("Domain expired")}
               </span>
             )}
           </div>
@@ -153,17 +150,16 @@ export function DomainDetail() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4" /> TLS Certificate
-            </CardTitle>
+              <ShieldCheck className="h-4 w-4" />{t("TLS Certificate")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Row label="Issuer" value={latest?.issuer ?? "—"} />
-            <Row label="Issuer Org" value={latest?.issuerOrg ?? "—"} />
-            <Row label="Serial" value={latest?.serial ?? "—"} mono />
-            <Row label="Valid From" value={formatDate(latest?.notBefore)} />
-            <Row label="Valid To" value={formatDate(latest?.notAfter)} />
+            <Row label={t("Issuer")} value={latest?.issuer ?? "—"} />
+            <Row label={t("Issuer Org")} value={latest?.issuerOrg ?? "—"} />
+            <Row label={t("Serial")} value={latest?.serial ?? "—"} mono />
+            <Row label={t("Valid From")} value={formatDate(latest?.notBefore)} />
+            <Row label={t("Valid To")} value={formatDate(latest?.notAfter)} />
             <Row
-              label="Last Check"
+              label={t("Last Check")}
               value={
                 latest?.checkedAt
                   ? `${formatDate(latest.checkedAt)} (${formatDistanceToNowStrict(
@@ -196,13 +192,12 @@ export function DomainDetail() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Globe className="h-4 w-4" /> Domain Registration
-            </CardTitle>
+              <Globe className="h-4 w-4" />{t("Domain Registration")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Row label="Registrar" value={latest?.domainRegistrar ?? "—"} />
+            <Row label={t("Registrar")} value={latest?.domainRegistrar ?? "—"} />
             <Row
-              label="Expires"
+              label={t("Expires")}
               value={
                 latest?.domainExpiresAt
                   ? `${formatDate(latest.domainExpiresAt)} (${formatDistanceToNowStrict(
@@ -212,11 +207,11 @@ export function DomainDetail() {
               }
             />
             <Row
-              label="Days Remaining"
+              label={t("Days Remaining")}
               value={
                 domainDays === null || domainDays === undefined
                   ? "—"
-                  : String(domainDays)
+                  : formatNumber(domainDays)
               }
             />
             {latest?.domainRegistrarError && (
@@ -226,9 +221,7 @@ export function DomainDetail() {
             )}
             {!latest?.domainRegistrarError &&
               (latest?.domainExpiresAt === null || latest?.domainExpiresAt === undefined) && (
-                <p className="mt-2 rounded-md bg-slate-50 p-2 text-xs text-slate-600">
-                  WHOIS/RDAP not yet resolved — re-run "Check Now" to retry.
-                </p>
+                <p className="mt-2 rounded-md bg-slate-50 p-2 text-xs text-slate-600">{t("WHOIS/RDAP not yet resolved — re-run \"Check Now\" to retry.")}</p>
               )}
           </CardContent>
         </Card>
@@ -237,19 +230,19 @@ export function DomainDetail() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Check History (last 10)</CardTitle>
+            <CardTitle>{t("Check History (last 10)")}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {checks.length === 0 ? (
-              <p className="p-6 text-sm text-slate-500">No checks yet.</p>
+              <p className="p-6 text-sm text-slate-500">{t("No checks yet.")}</p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>When</TableHead>
-                    <TableHead className="text-right">Cert Days</TableHead>
-                    <TableHead className="text-right">Domain Days</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>{t("When")}</TableHead>
+                    <TableHead className="text-end">{t("Cert Days")}</TableHead>
+                    <TableHead className="text-end">{t("Domain Days")}</TableHead>
+                    <TableHead>{t("Status")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -258,15 +251,15 @@ export function DomainDetail() {
                       <TableCell>
                         {formatDistanceToNowStrict(new Date(c.checkedAt))}
                       </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {c.daysRemaining ?? "—"}
+                      <TableCell className="text-end font-mono">
+                        {c.daysRemaining == null ? "—" : formatNumber(c.daysRemaining)}
                       </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {c.domainExpiresDaysRemaining ?? "—"}
+                      <TableCell className="text-end font-mono">
+                        {c.domainExpiresDaysRemaining == null ? "—" : formatNumber(c.domainExpiresDaysRemaining)}
                       </TableCell>
                       <TableCell>
                         {c.error ? (
-                          <span className="text-rose-600">Error</span>
+                          <span className="text-rose-600">{t("Error")}</span>
                         ) : (
                           <StatusBadge daysRemaining={c.daysRemaining} />
                         )}
@@ -286,11 +279,13 @@ export function DomainDetail() {
 }
 
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-1.5 last:border-0">
       <span className="text-slate-500">{label}</span>
       <span
-        className={`max-w-[60%] text-right text-slate-900 ${mono ? "font-mono text-xs" : ""}`}
+        dir="auto"
+        className={`max-w-[60%] break-words text-end text-slate-900 ${mono ? "font-mono text-xs" : ""}`}
         title={value}
       >
         {value}

@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 // Map stable cert error codes (written by services/checker.ts into
 // `checks.error`) to short, human-readable labels. Keep the keys in
 // sync with the codes the checker emits.
@@ -37,10 +38,10 @@ const fallback = (code: string) =>
     .join(" ");
 
 export const certErrorTitle = (code: string | null | undefined): string =>
-  (code && CERT_ERROR_TITLES[code]) || (code ? fallback(code) : "");
+  t((code && CERT_ERROR_TITLES[code]) || (code ? fallback(code) : ""));
 
 export const certErrorDescription = (code: string | null | undefined): string =>
-  (code && CERT_ERROR_DESCRIPTIONS[code]) || code || "";
+  t((code && CERT_ERROR_DESCRIPTIONS[code]) || code || "");
 
 /** @deprecated use certErrorTitle */
 export const humanizeCertError = certErrorTitle;

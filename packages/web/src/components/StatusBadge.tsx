@@ -1,3 +1,4 @@
+import { useI18n } from "../lib/i18n";
 import { cn } from "../lib/cn";
 
 export type StatusLevel = "healthy" | "warning" | "urgent" | "critical" | "emergency" | "unknown";
@@ -57,6 +58,7 @@ export function StatusBadge({
   className,
   showLabel = true,
 }: StatusBadgeProps) {
+  const { t } = useI18n();
   const resolved = level ?? statusLevelFromDays(daysRemaining);
   const meta = levelMeta[resolved];
   return (
@@ -68,7 +70,7 @@ export function StatusBadge({
       )}
     >
       <span className={cn("h-1.5 w-1.5 rounded-full", meta.dot)} />
-      {showLabel ? meta.label : null}
+      {showLabel ? t(meta.label) : null}
     </span>
   );
 }
