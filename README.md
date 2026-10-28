@@ -36,6 +36,8 @@ SSLert fills the gap.
 
 Use the language selector on the sign-in page or in the panel header to switch between English and فارسی. The choice is saved in your browser. Persian mode uses locally bundled Vazir fonts and Persian-calendar display dates; domain names, tokens and API values keep their original representation. Audit date filters still accept Gregorian dates and use UTC boundaries. Email/Telegram alert messages and server logs are not affected by the interface language.
 
+Email and Telegram messages have their own **Alert language** setting (English / فارسی) in each domain's **Alert Channels** form. Use the pencil button to edit an existing channel, including the default email channel. The choice is saved on the server per channel; existing channels default to English. Persian messages translate the subject and body for both certificate and domain expiry, and show the recording time in the Persian calendar with an explicit UTC label. Changing language does not send a test message or reset the 24-hour deduplication window. API clients can set `config.language` to `"en"` or `"fa"` when creating/updating a channel.
+
 The UI localization smoke tests run without a database, using API fixtures:
 
 ```bash

@@ -1,7 +1,7 @@
 import { useI18n, t, errorMessage } from "../lib/i18n";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, Loader2, Mail, Webhook, Send, MessageSquare, Bell } from "lucide-react";
+import { Plus, Trash2, Loader2, Mail, Webhook, Send, MessageSquare, Bell, Pencil } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -35,7 +35,7 @@ const CHANNEL_FIELDS: Record<ChannelKind, { key: string; label: string; type?: s
     { key: "secret", label: "Signing secret (optional, 16+ chars)", type: "password", placeholder: "leave blank to disable signing" },
   ],
   telegram: [
-    { key: "botToken", label: "Bot Token", placeholder: "123:abc…" },
+    { key: "botToken", label: "Bot Token", type: "password", placeholder: "123:abc…" },
     { key: "chatId", label: "Chat ID", placeholder: "-1001234567890" },
   ],
   slack: [
@@ -62,6 +62,8 @@ function ConfigForm({
 }) {
   const { t } = useI18n();
   const fields = CHANNEL_FIELDS[channel];
+  const supportsLanguage = channel === "email" || channel === "telegram";
+  const [alertLanguage, setAlertLanguage] = useState(initial.language === "fa" ? "fa" : "en");
   const [values, setValues] = useState<Record<string, string>>(() => {
     const out: Record<string, string> = {};
     for (const f of fields) {
@@ -76,11 +78,13 @@ function ConfigForm({
       className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3"
       onSubmit={(e) => {
         e.preventDefault();
-        const cfg: Record<string, unknown> = {};
+        const cfg: Record<string, unknown> = { ...initial };
         for (const f of fields) {
           const v = values[f.key]?.trim();
           if (v) cfg[f.key] = v;
+          else delete cfg[f.key];
         }
+        if (supportsLanguage) cfg.language = alertLanguage;
         onSubmit(cfg);
       }}
     >
@@ -97,6 +101,21 @@ function ConfigForm({
           />
         </label>
       ))}
+      {supportsLanguage && (
+        <label className="block text-xs text-slate-600">
+          <span className="mb-1 block font-medium text-slate-700">{t("Alert language")}</span>
+          <select
+            aria-label={t("Alert language")}
+            value={alertLanguage}
+            onChange={(event) => setAlertLanguage(event.target.value === "fa" ? "fa" : "en")}
+            className="w-full rounded-md border border-slate-200 bg-white px-2 py-2 text-sm"
+          >
+            <option value="en">English</option>
+            <option value="fa">فارسی</option>
+          </select>
+          <span className="mt-1 block">{t("Saved for this channel, independently of the panel language.")}</span>
+        </label>
+      )}
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" size="sm" variant="ghost" onClick={onCancel} disabled={isPending}>{t("Cancel")}</Button>
         <Button type="submit" size="sm" disabled={isPending}>
@@ -118,7 +137,10 @@ export function ChannelsEditor({ domainId }: { domainId: number }) {
 
   const upsert = useMutation({
     mutationFn: (args: { channel: ChannelKind; config: Record<string, unknown> }) =>
-      api.upsertChannel(domainId, args.channel, { enabled: true, config: args.config }),
+      api.upsertChannel(domainId, args.channel, {
+        enabled: channels.data?.channels.find((c) => c.channel === args.channel)?.enabled ?? true,
+        config: args.config,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["channels", domainId] });
       setEditing(null);
@@ -132,7 +154,8 @@ export function ChannelsEditor({ domainId }: { domainId: number }) {
 
   const allKinds: ChannelKind[] = ["email", "webhook", "telegram", "slack", "ntfy"];
   const configured = new Set((channels.data?.channels ?? []).map((c) => c.channel));
-  const available = allKinds.filter((k) => !configured.has(k) || k === "email");
+  const available = allKinds.filter((k) => !configured.has(k));
+  const editingChannel = channels.data?.channels.find((c) => c.channel === editing);
 
   return (
     <Card>
@@ -152,7 +175,7 @@ export function ChannelsEditor({ domainId }: { domainId: number }) {
               key={c.id || `${c.domainId}-${c.channel}`}
               className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
             >
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 {CHANNEL_ICONS[c.channel]}
                 <span className="font-medium text-slate-900">
                   {t(CHANNEL_LABELS[c.channel])}
@@ -163,28 +186,46 @@ export function ChannelsEditor({ domainId }: { domainId: number }) {
                 {!c.enabled && (
                   <span className="rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700">{t("disabled")}</span>
                 )}
+                {(c.channel === "email" || c.channel === "telegram") && (
+                  <span className="text-xs text-slate-500">
+                    {t("Alert language")}: {c.config.language === "fa" ? "فارسی" : "English"}
+                  </span>
+                )}
               </div>
-              {c.id !== 0 && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  title={t("Remove channel")}
-                  onClick={() => remove.mutate(c.id)}
-                  disabled={remove.isPending}
-                >
-                  <Trash2 className="h-4 w-4 text-rose-500" />
-                </Button>
-              )}
+              <div className="flex shrink-0 items-center gap-1">
+                {(c.channel === "email" || c.channel === "telegram") && (
+                  <Button
+                    size="icon" variant="ghost"
+                    title={t("Edit channel")}
+                    onClick={() => { upsert.reset(); setEditing(c.channel); }}
+                    disabled={upsert.isPending}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+                {c.id !== 0 && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    title={t("Remove channel")}
+                    onClick={() => remove.mutate(c.id)}
+                    disabled={remove.isPending}
+                  >
+                    <Trash2 className="h-4 w-4 text-rose-500" />
+                  </Button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
 
-        {available.length > 0 && (
+        {(editing || available.length > 0) && (
           <div className="border-t border-slate-100 pt-3">
             {editing ? (
               <ConfigForm
+                key={editing}
                 channel={editing}
-                initial={{}}
+                initial={editingChannel?.config ?? {}}
                 isPending={upsert.isPending}
                 onCancel={() => setEditing(null)}
                 onSubmit={(config) => upsert.mutate({ channel: editing, config })}

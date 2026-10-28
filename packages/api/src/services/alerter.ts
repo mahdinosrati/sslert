@@ -8,6 +8,7 @@ import {
 } from "./channels.js";
 import { logger } from "./logger.js";
 import { recordAlertOutcome } from "../lib/metrics.js";
+import { localizeAlert } from "./alert-language.js";
 
 export type AlertLevel = "warning" | "urgent" | "critical" | "emergency";
 export type AlertSource = "cert" | "domain";
@@ -302,7 +303,10 @@ async function dispatchOne(
           return;
         }
       }
-      const sendRes = await sender.send(content, cfg, process.env);
+      const localizedContent = channelName === "email" || channelName === "telegram"
+        ? localizeAlert(content, cfg.language, checkId)
+        : content;
+      const sendRes = await sender.send(localizedContent, cfg, process.env);
       if (sendRes.error) {
         results.push({ channel: channelName, source, level: level.level, status: "failed", error: sendRes.error });
         recordAlertRow(db, {

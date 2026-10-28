@@ -89,6 +89,7 @@ export const channelConfigSchema = z
     topic: z.string().optional(),
     server: z.string().optional(),
     secret: z.string().optional(),
+      language: z.enum(["en", "fa"]).optional().describe("Email/Telegram message language; defaults to en independently of UI language."),
   })
   .openapi("ChannelConfig");
 

@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type Database from "better-sqlite3";
 import { getRawSqlite } from "./index.js";
 
@@ -76,7 +77,7 @@ function execMigrationFile(sqlite: Database.Database, path: string): void {
 
 export function runSqlMigrations(sqlite?: Database.Database): void {
   const db = sqlite ?? getRawSqlite();
-  const migrationsFolder = new URL("./migrations", import.meta.url).pathname;
+  const migrationsFolder = fileURLToPath(new URL("./migrations", import.meta.url));
   ensureMigrationsTable(db);
   const applied = appliedMigrations(db);
   for (const file of listMigrationFiles(migrationsFolder)) {

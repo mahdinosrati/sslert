@@ -30,6 +30,7 @@ const channelConfigSchema = z
     topic: z.string().optional(),
     server: z.string().optional(),
     secret: z.string().min(16).max(256).optional(),
+    language: z.enum(["en", "fa"]).optional(),
   })
   .strict()
   .partial();
@@ -156,6 +157,7 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
                   topic: z.string().optional(),
                   server: z.string().optional(),
                   secret: z.string().min(16).max(256).optional(),
+                  language: z.enum(["en", "fa"]).optional(),
                 })
                 .optional(),
             }),
@@ -215,6 +217,7 @@ export function createChannelsRouter(db: DB = getDb()): Hono<Env> {
                   topic: z.string().optional(),
                   server: z.string().optional(),
                   secret: z.string().min(16).max(256).optional(),
+                  language: z.enum(["en", "fa"]).optional(),
                 })
                 .optional(),
             }),

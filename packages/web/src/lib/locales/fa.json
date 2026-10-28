@@ -1,5 +1,8 @@
 {
   "Language": "زبان",
+  "Alert language": "زبان هشدار",
+  "Edit channel": "ویرایش کانال",
+  "Saved for this channel, independently of the panel language.": "این انتخاب برای همین کانال ذخیره می‌شود و از زبان پنل مستقل است.",
   "Dashboard": "داشبورد",
   "Audit": "فعالیت‌ها",
   "+ Add": "+ افزودن",
