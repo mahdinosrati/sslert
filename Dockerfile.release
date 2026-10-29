@@ -113,6 +113,7 @@ RUN groupadd --system --gid 10001 sslert \
 # the api runtime layout.
 COPY --from=api-build --chown=root:root      /app/packages/api/dist                ./dist
 COPY --from=api-build --chown=root:root      /app/packages/api/package.json        ./packages/api/package.json
+COPY --from=api-build --chown=root:root      /app/packages/web/package.json        ./packages/web/package.json
 COPY --from=api-build --chown=root:root      /app/packages/api/docker-entrypoint.sh /usr/local/bin/api-entrypoint.sh
 COPY --from=api-build --chown=root:root      /app/package.json                     ./package.json
 COPY --from=api-build --chown=root:root      /app/package-lock.json                ./package-lock.json

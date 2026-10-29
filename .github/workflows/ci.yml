@@ -38,6 +38,11 @@ jobs:
         # in routes/* tests that import the singleton DB; harmless flake).
         run: npm test || npm test
 
+      - name: Browser checks
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test --config packages/web/playwright.i18n.config.ts
+
       - name: Build
         run: npm run build
 
@@ -49,6 +54,9 @@ jobs:
 
       - name: Build web image
         run: docker build -t sslert-web:test -f packages/web/Dockerfile .
+
+      - name: Build combined release image
+        run: docker build -t bamdad-alert:release-test -f Dockerfile.release .
 
   security:
     runs-on: ubuntu-latest
