@@ -21,7 +21,9 @@ import {
 } from "../services/notifications.js";
 import { __resetRateLimiterForTests } from "../middleware/rate-limit.js";
 import { eq } from "drizzle-orm";
-const send = vi.hoisted(() => vi.fn(async () => ({ id: "sent-1" })));
+const send = vi.hoisted(() =>
+  vi.fn(async (..._args: any[]) => ({ id: "sent-1" })),
+);
 vi.mock("../services/channels.js", () => ({
   getChannelSender: () => ({ send }),
 }));
@@ -472,5 +474,145 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
       "cert",
     ]);
     expect(send.mock.calls[0][0].text).toContain("service.corp.local");
+  });
+
+  it("deletes accounts, revokes sessions and preserves monitored resources", async () => {
+    const c = await admin();
+    const { u, cookie } = await ordinary();
+    const r = store.db
+      .insert(resources)
+      .values({ title: "Keep", kind: "license" })
+      .returning()
+      .get()!;
+    store.db
+      .insert(userResources)
+      .values({ userId: u.id, resourceId: r.id })
+      .run();
+    expect((await req("/users/1", "DELETE", undefined, c)).status).toBe(409);
+    expect((await req("/users/1", "DELETE", undefined, cookie)).status).toBe(
+      403,
+    );
+    expect((await req("/users/" + u.id, "DELETE", undefined, c)).status).toBe(
+      200,
+    );
+    expect((await req("/auth/me", "GET", undefined, cookie)).status).toBe(401);
+    expect(store.db.select().from(resources).all()).toHaveLength(1);
+    expect(store.db.select().from(userResources).all()).toHaveLength(0);
+  });
+  it("encrypts SMTP credentials, hides them and preserves them on edits", async () => {
+    const c = await admin();
+    const body = {
+      name: "SMTP",
+      channel: "email",
+      enabled: true,
+      shared: true,
+      config: {
+        emailProvider: "smtp",
+        to: "recipient@example.com",
+        from: "sender@example.com",
+        smtpHost: "mail.internal",
+        smtpPort: 587,
+        smtpSecurity: "starttls",
+        smtpAuth: true,
+        smtpUsername: "sender",
+        smtpPassword: "smtp-test-secret",
+      },
+    };
+    const response = await req("/notifications/connections", "POST", body, c);
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    const id = result.connection.id;
+    expect(result.connection.config.smtpPassword).toBeUndefined();
+    expect(result.connection.config.smtpPasswordSet).toBe(true);
+    expect(
+      store.db.select().from(connections).where(eq(connections.id, id)).get()!
+        .config,
+    ).not.toContain("smtp-test-secret");
+    const { smtpPassword, ...config } = body.config;
+    expect(
+      (
+        await req(
+          "/notifications/connections/" + id,
+          "PUT",
+          { ...body, name: "Edited", config },
+          c,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (await req("/notifications/connections/" + id + "/test", "POST", {}, c))
+        .status,
+    ).toBe(200);
+    expect(send.mock.calls.at(-1)?.[1]).toMatchObject({
+      smtpPassword: "smtp-test-secret",
+    });
+    const { cookie } = await ordinary();
+    const viewed = await (
+      await req("/notifications/connections", "GET", undefined, cookie)
+    ).json();
+    expect(JSON.stringify(viewed)).not.toContain("smtpUsername");
+  });
+  it("filters and paginates history without exposing unassigned targets", async () => {
+    const c = await admin();
+    const { u, cookie } = await ordinary();
+    const r = store.db
+      .insert(resources)
+      .values({ title: "Allowed", kind: "license" })
+      .returning()
+      .get()!;
+    store.db
+      .insert(userResources)
+      .values({ userId: u.id, resourceId: r.id })
+      .run();
+    for (let i = 0; i < 55; i++)
+      store.db
+        .insert(deliveries)
+        .values({
+          targetKey: "resource:" + r.id,
+          source: "license",
+          level: "7",
+          status: "sent",
+          createdAt: new Date().toISOString(),
+        })
+        .run();
+    store.db
+      .insert(deliveries)
+      .values({
+        targetKey: "resource:999",
+        source: "license",
+        level: "7",
+        status: "failed",
+        createdAt: new Date().toISOString(),
+      })
+      .run();
+    const first = await (
+      await req("/notifications/history", "GET", undefined, cookie)
+    ).json();
+    expect(first.deliveries).toHaveLength(50);
+    expect(first.hasMore).toBe(true);
+    expect(first.deliveries[0].targetName).toBe("Allowed");
+    const second = await (
+      await req("/notifications/history?page=1", "GET", undefined, cookie)
+    ).json();
+    expect(second.deliveries).toHaveLength(5);
+    expect(
+      (
+        await (
+          await req(
+            "/notifications/history?status=failed",
+            "GET",
+            undefined,
+            cookie,
+          )
+        ).json()
+      ).deliveries,
+    ).toHaveLength(0);
+    expect(
+      (
+        await (
+          await req("/notifications/history?status=failed", "GET", undefined, c)
+        ).json()
+      ).deliveries,
+    ).toHaveLength(1);
   });
 });

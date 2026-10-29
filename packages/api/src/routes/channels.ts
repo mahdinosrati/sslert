@@ -30,6 +30,20 @@ const channelNameSchema = z.enum([
 // SSLert instance. Min length 16, max 256.
 export const channelConfigSchema = z
   .object({
+    emailProvider: z.enum(["smtp", "resend"]).optional(),
+    senderName: z.string().max(100).optional(),
+    smtpHost: z
+      .string()
+      .min(1)
+      .max(253)
+      .regex(/^[a-zA-Z0-9.:[\]_-]+$/)
+      .optional(),
+    smtpPort: z.number().int().min(1).max(65535).optional(),
+    smtpSecurity: z.enum(["tls", "starttls", "none"]).optional(),
+    smtpAuth: z.boolean().optional(),
+    smtpUsername: z.string().max(256).optional(),
+    smtpPassword: z.string().max(4096).optional(),
+    resendApiKey: z.string().max(4096).optional(),
     url: z.string().url().optional(),
     to: z.string().email().optional(),
     from: z.string().optional(),
@@ -64,6 +78,17 @@ export async function validateChannelConfig(
   channel: "email" | "webhook" | "telegram" | "slack" | "ntfy",
   config: Record<string, unknown>,
 ): Promise<string | null> {
+  if (channel === "email" && config.emailProvider === "smtp") {
+    if (
+      !config.smtpHost ||
+      !config.smtpPort ||
+      !config.smtpSecurity ||
+      !z.string().email().safeParse(config.from).success
+    )
+      return "Invalid SMTP settings";
+    if (config.smtpAuth && (!config.smtpUsername || !config.smtpPassword))
+      return "SMTP credentials required";
+  }
   if (channel === "webhook" || channel === "slack") {
     const url = config.url;
     if (typeof url !== "string" || !url) {

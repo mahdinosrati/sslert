@@ -1,6 +1,11 @@
+import {
+  sealConfig,
+  openConfig,
+  publicConfig,
+} from "../services/notification-secrets.js";
 import { Hono } from "hono";
 import { z } from "zod";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, or, sql } from "drizzle-orm";
 import type { DB } from "../db/index.js";
 import type { AuthEnv, RequestActor } from "../middleware/auth.js";
 import {
@@ -73,7 +78,7 @@ export function createNotificationsRouter(db: DB) {
     c.json({
       connections: allowed(c.get("actor")!).map((r) =>
         c.get("actor")!.role === "admin"
-          ? { ...r, config: JSON.parse(r.config) }
+          ? { ...r, config: publicConfig(JSON.parse(r.config)) }
           : {
               id: r.id,
               name: r.name,
@@ -98,6 +103,48 @@ export function createNotificationsRouter(db: DB) {
         if (!input.success)
           return c.json({ error: "Invalid connection settings" }, 400);
         const data = input.data;
+        if (method === "put") {
+          const old = db
+            .select()
+            .from(connections)
+            .where(eq(connections.id, Number(c.req.param("id"))))
+            .get();
+          if (!old) return c.json({ error: "Not found" }, 404);
+          const previous = JSON.parse(old.config);
+          if (old.channel === data.channel)
+            for (const field of ["smtpPassword", "resendApiKey"] as const) {
+              const needed =
+                field === "smtpPassword"
+                  ? data.config.emailProvider === "smtp" && data.config.smtpAuth
+                  : data.config.emailProvider !== "smtp";
+              if (
+                needed &&
+                data.config[field] === undefined &&
+                previous[field]
+              ) {
+                try {
+                  data.config[field] = openConfig({ [field]: previous[field] })[
+                    field
+                  ];
+                } catch {
+                  return c.json(
+                    {
+                      error:
+                        "Saved credentials unavailable. Re-enter email credentials.",
+                    },
+                    400,
+                  );
+                }
+              }
+            }
+        }
+        if (data.config.emailProvider === "smtp")
+          delete data.config.resendApiKey;
+        if (data.config.emailProvider === "resend") {
+          delete data.config.smtpPassword;
+          delete data.config.smtpUsername;
+        }
+        if (data.config.smtpAuth === false) delete data.config.smtpPassword;
         const invalid = await validateChannelConfig(data.channel, data.config);
         if (invalid)
           return c.json({ error: "Invalid connection settings" }, 400);
@@ -108,7 +155,10 @@ export function createNotificationsRouter(db: DB) {
           (!data.config.botToken || !data.config.chatId)
         )
           return c.json({ error: "Bot token and chat ID are required" }, 400);
-        const values = { ...data, config: JSON.stringify(data.config) };
+        const values = {
+          ...data,
+          config: JSON.stringify(sealConfig(data.config)),
+        };
         const row =
           method === "post"
             ? db.insert(connections).values(values).returning().get()
@@ -121,7 +171,7 @@ export function createNotificationsRouter(db: DB) {
         if (!row) return c.json({ error: "Not found" }, 404);
         audit(actor, "connection.save", String(row.id));
         return c.json({
-          connection: { ...row, config: JSON.parse(row.config) },
+          connection: { ...row, config: publicConfig(JSON.parse(row.config)) },
         });
       },
     );
@@ -218,14 +268,64 @@ export function createNotificationsRouter(db: DB) {
   });
   app.get("/history", (c) => {
     const a = c.get("actor")!;
+    const page = Math.max(
+      0,
+      Math.min(100000, Number(c.req.query("page")) || 0),
+    );
+    const status = c.req.query("status");
+    if (
+      !Number.isInteger(page) ||
+      (status && !["sent", "failed", "logged", "pending"].includes(status))
+    )
+      return c.json({ error: "Invalid history filter" }, 400);
+    const scope =
+      a.role === "admin"
+        ? undefined
+        : or(
+            sql`${deliveries.targetKey} IN (SELECT 'domain:' || domain_id FROM user_domains WHERE user_id = ${a.userId})`,
+            sql`${deliveries.targetKey} IN (SELECT 'resource:' || resource_id FROM user_resources WHERE user_id = ${a.userId})`,
+          );
     const rows = db
       .select()
       .from(deliveries)
+      .where(and(scope, status ? eq(deliveries.status, status) : undefined))
       .orderBy(desc(deliveries.id))
-      .all()
-      .filter((r) => a.role === "admin" || canAccessTarget(db, a, r.targetKey))
-      .slice(0, 100);
-    return c.json({ deliveries: rows });
+      .limit(51)
+      .offset(page * 50)
+      .all();
+    return c.json({
+      hasMore: rows.length > 50,
+      deliveries: rows.slice(0, 50).map((r) => {
+        const [kind, id] = r.targetKey.split(":");
+        const targetName =
+          kind === "resource"
+            ? db
+                .select()
+                .from(resources)
+                .where(eq(resources.id, Number(id)))
+                .get()?.title
+            : kind === "domain"
+              ? db
+                  .select()
+                  .from(domains)
+                  .where(eq(domains.id, Number(id)))
+                  .get()?.hostname
+              : undefined;
+        const connection = r.connectionId
+          ? db
+              .select()
+              .from(connections)
+              .where(eq(connections.id, r.connectionId))
+              .get()
+          : undefined;
+        return {
+          ...r,
+          targetName,
+          connectionName: connection?.name,
+          channel: connection?.channel,
+        };
+      }),
+    });
   });
   return app;
 }

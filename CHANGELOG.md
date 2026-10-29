@@ -1,3 +1,7 @@
+## 1.0.3
+
+Unified expiry dashboard, safe account deletion, user password visibility, encrypted SMTP/Resend configuration, filtered delivery history, and updated bilingual documentation/screenshots.
+
 # 1.0.2 — Manual internal domains and organizational SSL
 
 Add manual domain/certificate expiry records with hostname, issuer, serial and validity dates; preserve existing records and assignments during migration. Add login password visibility, centered login branding, SVG favicon, Persian name «هشدار بامداد» and icon-only developer email/Telegram links.

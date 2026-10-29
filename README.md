@@ -1,8 +1,8 @@
-# Bamdad Alert 1.0.2
+# Bamdad Alert 1.0.3
 
 Self-hosted monitoring for SSL certificates, domain registrations, software licenses and API expiry dates. Built for the Bamdad Information Technology Group.
 
-[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.2.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
+[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.3.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
 
 English is the default. Persian includes RTL layout and bundled Vazir fonts. Choose light, dark or system appearance. The bilingual About page credits Mahdi Nosrati and links to [mahdinosrati07@gmail.com](mailto:mahdinosrati07@gmail.com).
 
@@ -11,7 +11,7 @@ English is the default. Persian includes RTL layout and bundled Vazir fonts. Cho
 Install Docker Engine and Compose v2 using the [official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/), then:
 
 ```bash
-git clone --branch v1.0.2 https://github.com/mahdinosrati/sslert.git
+git clone --branch v1.0.3 https://github.com/mahdinosrati/sslert.git
 cd sslert
 cp .env.example .env
 chmod 600 .env
@@ -75,7 +75,7 @@ Saving in the UI does not change the active port. The script checks availability
 
 ## Upgrade and rollback
 
-Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.2`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
+Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.3`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
 
 Migrations preserve old domains, checks and channels. Existing receiver configurations become per-domain custom policies; global email fallback is imported where applicable. Subsequent connection changes belong in the central Notifications UI. Legacy `/domains/:id/channels` configuration is retired after migration.
 
@@ -116,3 +116,15 @@ npm run dev:web
 ## License and upstream
 
 AGPL-3.0; original license and upstream attribution are retained. Based on [SSLert](https://github.com/einperegrin/sslert). Bamdad additions developed by Mahdi Nosrati.
+
+## 1.0.3: unified dashboard and organizational email
+
+The dashboard lists automatic SSL, domain registration and all manual expiry records with status cards, search and filters. Each automatic hostname contributes two independently monitored expiry entries. User access restrictions apply to both rows and counts.
+
+Administrators can delete accounts after typing the username. The current account and last enabled administrator cannot be deleted. Sessions/tokens are revoked; monitored records remain. Password visibility applies only to newly entered passwords.
+
+In Notifications, choose Email → SMTP, enter host, port, TLS mode, optional authentication, sender name/address and recipient, then save and send a test. STARTTLS is required when selected (usually port 587); implicit TLS usually uses 465. Plain SMTP is an explicit option for internal relays. Certificate verification remains enabled; mount your organizational CA and configure `NODE_EXTRA_CA_CERTS` if needed. SMTP transport uses [Nodemailer](https://nodemailer.com/smtp).
+
+Resend remains available, with a per-connection API key or the server `RESEND_API_KEY` fallback. Without a key, Resend-mode delivery is logged only. SMTP passwords and per-connection Resend keys are encrypted with AES-256-GCM and never returned by the API. Blank password edits preserve the saved value; disabling SMTP authentication removes its password. The key is generated beside the database as `notification.key` (Docker: `/app/data/notification.key`). Securely preserve it separately with database backups; the legacy backup CLI does not export it. Losing the key requires re-entering connection credentials.
+
+History includes target/connection names, channel, time and result, with status filtering and 50-row pagination. Accepted means the delivery service accepted the message, not guaranteed inbox delivery. Users see history only for assigned targets.

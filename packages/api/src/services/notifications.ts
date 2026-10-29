@@ -1,3 +1,4 @@
+import { openConfig } from "./notification-secrets.js";
 import { and, eq, gte, inArray } from "drizzle-orm";
 import type { DB } from "../db/index.js";
 import {
@@ -170,7 +171,7 @@ export async function sendConnection(
   if (!claim) return { status: "deduped" };
   let status = "failed";
   try {
-    const config = JSON.parse(connection.config);
+    const config = openConfig(JSON.parse(connection.config));
     const fa = config.language === "fa";
     const label = fa
       ? ({

@@ -52,6 +52,28 @@ test.beforeEach(async ({ page }) => {
       expiresAt: "2026-12-20",
       enabled: true,
     },
+    {
+      id: 3,
+      kind: "cert",
+      title: "گواهی سامانه داخلی",
+      hostname: "portal.internal",
+      provider: "Bamdad CA",
+      owner: "تیم زیرساخت",
+      notes: "",
+      expiresAt: "2027-02-01",
+      enabled: true,
+    },
+    {
+      id: 4,
+      kind: "domain",
+      title: "دامنه سازمانی",
+      hostname: "internal.example.com",
+      provider: "",
+      owner: "",
+      notes: "",
+      expiresAt: "2027-04-01",
+      enabled: true,
+    },
   ];
   const connections = [
     {
@@ -287,7 +309,7 @@ test("test notification button works independently of expiry", async ({
     .first()
     .click();
   await expect(page.getByRole("status").first()).toHaveText(
-    "Test notification sent",
+    "Accepted by delivery service",
   );
   await page
     .getByRole("button", { name: "Add connection", exact: true })
@@ -368,6 +390,17 @@ test("documentation screenshots in light and dark themes", async ({
         fullPage: true,
       });
     }
+    await page.goto("/notifications");
+    await page
+      .getByRole("button", { name: "افزودن ارتباط", exact: true })
+      .click();
+    await page.getByLabel("روش ارسال ایمیل").selectOption("smtp");
+    await page.getByLabel("سرور SMTP").fill("mail.internal.example");
+    await page.getByLabel("احراز هویت SMTP", { exact: true }).check();
+    await page.screenshot({
+      path: resolve(folder, `smtp${theme === "dark" ? "-dark" : ""}.png`),
+      fullPage: true,
+    });
   }
 });
 
@@ -435,4 +468,57 @@ test("manual organizational SSL form submits certificate metadata", async ({
   await expect(
     page.getByRole("heading", { name: "Organization SSL" }),
   ).toBeVisible();
+});
+
+test("unified dashboard filters manual records", async ({ page }) => {
+  await login(page);
+  await expect(
+    page.getByText("لایسنس سامانه پشتیبان‌گیری", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "Type", exact: true })
+    .selectOption("API expiry");
+  await expect(
+    page.getByText("اعتبار سرویس API", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("لایسنس سامانه پشتیبان‌گیری", { exact: true }),
+  ).toHaveCount(0);
+});
+test("SMTP form submits defaults without secret markers", async ({ page }) => {
+  await login(page);
+  await page.goto("/notifications");
+  await page
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
+  await page.getByLabel("Name", { exact: true }).fill("Internal email");
+  await page.getByLabel("Email provider").selectOption("smtp");
+  await page.getByLabel("SMTP host").fill("mail.internal");
+  await page.getByLabel("Recipient email").fill("to@example.com");
+  await page.getByLabel("Sender email").fill("from@example.com");
+  await page.getByLabel("SMTP authentication", { exact: true }).check();
+  await page.getByLabel("SMTP username").fill("sender");
+  await page.getByLabel("SMTP password").fill("test-password");
+  const sent = page.waitForRequest(
+    (r) =>
+      r.method() === "POST" &&
+      r.url().endsWith("/api/notifications/connections"),
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).first().click();
+  expect((await sent).postDataJSON().config).toMatchObject({
+    smtpPort: 587,
+    smtpSecurity: "starttls",
+    smtpPassword: "test-password",
+  });
+});
+test("user creation password visibility", async ({ page }) => {
+  await login(page);
+  await page.goto("/users");
+  await page.getByRole("button", { name: "Add user", exact: true }).click();
+  const password = page.getByLabel("Password", { exact: true });
+  await password.fill("example-password");
+  await page.getByLabel("Show password", { exact: true }).check();
+  await expect(password).toHaveAttribute("type", "text");
+  await page.getByLabel("Show password", { exact: true }).uncheck();
+  await expect(password).toHaveAttribute("type", "password");
 });

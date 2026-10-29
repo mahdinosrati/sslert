@@ -167,9 +167,14 @@ export function Notifications() {
     queryFn: () =>
       request<{ connections: Connection[] }>("/api/notifications/connections"),
   });
+  const [historyStatus, setHistoryStatus] = useState("");
+  const [historyPage, setHistoryPage] = useState(0);
   const history = useQuery({
-    queryKey: ["deliveries"],
-    queryFn: () => request<{ deliveries: any[] }>("/api/notifications/history"),
+    queryKey: ["deliveries", historyStatus, historyPage],
+    queryFn: () =>
+      request<{ deliveries: any[]; hasMore: boolean }>(
+        `/api/notifications/history?status=${historyStatus}&page=${historyPage}`,
+      ),
   });
   const blank = {
     id: 0,
@@ -230,7 +235,7 @@ export function Notifications() {
                       setMessage(
                         t(
                           r.status === "sent"
-                            ? "Test notification sent"
+                            ? "Accepted by delivery service"
                             : r.status === "logged"
                               ? "Logged only. Configure RESEND_API_KEY on the server to send email."
                               : "Please wait 30 seconds before testing again.",
@@ -283,6 +288,13 @@ export function Notifications() {
               e.preventDefault();
               void action(async () => {
                 const { id, ...body } = editing;
+                body.config = { ...body.config };
+                if (body.config.emailProvider === "smtp") {
+                  body.config.smtpPort ??= 587;
+                  body.config.smtpSecurity ??= "starttls";
+                }
+                delete body.config.smtpPasswordSet;
+                delete body.config.resendApiKeySet;
                 await request(
                   `/api/notifications/connections${id ? `/${id}` : ""}`,
                   { method: id ? "PUT" : "POST", body: JSON.stringify(body) },
@@ -335,6 +347,186 @@ export function Notifications() {
                 <option value="fa">{t("Persian")}</option>
               </select>
             </label>
+            {editing.channel === "email" && (
+              <>
+                <label>
+                  {t("Email provider")}
+                  <select
+                    value={editing.config.emailProvider || "resend"}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        config: {
+                          ...editing.config,
+                          emailProvider: e.target.value,
+                        },
+                      })
+                    }
+                  >
+                    <option value="resend">Resend</option>
+                    <option value="smtp">SMTP</option>
+                  </select>
+                </label>
+                <label>
+                  {t("Sender name")}
+                  <input
+                    value={editing.config.senderName || ""}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        config: {
+                          ...editing.config,
+                          senderName: e.target.value,
+                        },
+                      })
+                    }
+                  />
+                </label>
+                {editing.config.emailProvider === "smtp" ? (
+                  <>
+                    <label>
+                      {t("SMTP host")}
+                      <input
+                        required
+                        dir="ltr"
+                        value={editing.config.smtpHost || ""}
+                        onChange={(e) =>
+                          setEditing({
+                            ...editing,
+                            config: {
+                              ...editing.config,
+                              smtpHost: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      {t("SMTP port")}
+                      <input
+                        required
+                        type="number"
+                        min="1"
+                        max="65535"
+                        value={editing.config.smtpPort ?? 587}
+                        onChange={(e) =>
+                          setEditing({
+                            ...editing,
+                            config: {
+                              ...editing.config,
+                              smtpPort: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      {t("Connection security")}
+                      <select
+                        value={editing.config.smtpSecurity || "starttls"}
+                        onChange={(e) =>
+                          setEditing({
+                            ...editing,
+                            config: {
+                              ...editing.config,
+                              smtpSecurity: e.target.value,
+                            },
+                          })
+                        }
+                      >
+                        <option value="starttls">STARTTLS</option>
+                        <option value="tls">TLS</option>
+                        <option value="none">
+                          {t("None (internal relay)")}
+                        </option>
+                      </select>
+                    </label>
+                    <label className="check-label">
+                      <input
+                        type="checkbox"
+                        checked={!!editing.config.smtpAuth}
+                        onChange={(e) =>
+                          setEditing({
+                            ...editing,
+                            config: {
+                              ...editing.config,
+                              smtpAuth: e.target.checked,
+                            },
+                          })
+                        }
+                      />
+                      {t("SMTP authentication")}
+                    </label>
+                    {editing.config.smtpAuth && (
+                      <>
+                        <label>
+                          {t("SMTP username")}
+                          <input
+                            required
+                            autoComplete="off"
+                            value={editing.config.smtpUsername || ""}
+                            onChange={(e) =>
+                              setEditing({
+                                ...editing,
+                                config: {
+                                  ...editing.config,
+                                  smtpUsername: e.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          {t("SMTP password")}
+                          <input
+                            type="password"
+                            autoComplete="new-password"
+                            placeholder={
+                              editing.config.smtpPasswordSet
+                                ? t("Saved; leave blank to keep")
+                                : ""
+                            }
+                            value={editing.config.smtpPassword || ""}
+                            onChange={(e) =>
+                              setEditing({
+                                ...editing,
+                                config: {
+                                  ...editing.config,
+                                  smtpPassword: e.target.value || undefined,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <label>
+                    {t("Resend API key")}
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder={
+                        editing.config.resendApiKeySet
+                          ? t("Saved; leave blank to keep")
+                          : t("Optional: use server key")
+                      }
+                      value={editing.config.resendApiKey || ""}
+                      onChange={(e) =>
+                        setEditing({
+                          ...editing,
+                          config: {
+                            ...editing.config,
+                            resendApiKey: e.target.value || undefined,
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                )}
+              </>
+            )}
             {(editing.channel === "email"
               ? ["to", "from"]
               : editing.channel === "telegram"
@@ -366,13 +558,11 @@ export function Notifications() {
                     ["botToken", "secret"].includes(field) ? "password" : "text"
                   }
                   autoComplete="off"
-                  required={[
-                    "to",
-                    "botToken",
-                    "chatId",
-                    "url",
-                    "topic",
-                  ].includes(field)}
+                  required={
+                    (field === "from" &&
+                      editing.config.emailProvider === "smtp") ||
+                    ["to", "botToken", "chatId", "url", "topic"].includes(field)
+                  }
                   value={editing.config[field] ?? ""}
                   onChange={(e) => {
                     const config = { ...editing.config };
@@ -421,11 +611,28 @@ export function Notifications() {
       <NotificationPolicy targetKey="global" />
       <section className="panel">
         <h2 className="mb-4 text-xl">{t("Delivery history")}</h2>
+        <label className="form-grid mb-4 max-w-xs">
+          {t("Status")}
+          <select
+            value={historyStatus}
+            onChange={(e) => {
+              setHistoryStatus(e.target.value);
+              setHistoryPage(0);
+            }}
+          >
+            {["", "sent", "failed", "logged", "pending"].map((x) => (
+              <option key={x} value={x}>
+                {t(x || "All")}
+              </option>
+            ))}
+          </select>
+        </label>
+        {history.isError && <p role="alert">{errorMessage(history.error)}</p>}
         <div className="overflow-x-auto">
           <table className="w-full text-start text-sm">
             <thead>
               <tr>
-                {["When", "Item", "Source", "Status"].map((x) => (
+                {["When", "Item", "Source", "Channel", "Status"].map((x) => (
                   <th className="p-2 text-start" key={x}>
                     {t(x)}
                   </th>
@@ -439,12 +646,19 @@ export function Notifications() {
                     <bdi>{formatDate(r.createdAt)}</bdi>
                   </td>
                   <td className="p-2">
-                    <bdi>{r.targetKey}</bdi>
+                    <bdi>{r.targetName || r.targetKey}</bdi>
                     {r.isTest && ` · ${t("Test")}`}
                   </td>
                   <td className="p-2">{t(r.source)}</td>
                   <td className="p-2">
-                    {t(r.status)}
+                    {r.connectionName} · {t(r.channel || "Deleted")}
+                  </td>
+                  <td className="p-2">
+                    {t(
+                      r.status === "sent"
+                        ? "Accepted by delivery service"
+                        : r.status,
+                    )}
                     {r.error && <p className="text-rose-600">{t(r.error)}</p>}
                   </td>
                 </tr>
@@ -454,6 +668,22 @@ export function Notifications() {
           {history.data?.deliveries.length === 0 && (
             <p className="py-4 text-slate-500">{t("No deliveries yet")}</p>
           )}
+        </div>
+        <div className="flex gap-3">
+          <button
+            className="secondary"
+            disabled={historyPage === 0 || history.isFetching}
+            onClick={() => setHistoryPage((p) => p - 1)}
+          >
+            {t("Previous")}
+          </button>
+          <button
+            className="secondary"
+            disabled={!history.data?.hasMore || history.isFetching}
+            onClick={() => setHistoryPage((p) => p + 1)}
+          >
+            {t("Next")}
+          </button>
         </div>
       </section>
     </div>

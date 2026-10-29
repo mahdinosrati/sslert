@@ -1,143 +1,222 @@
-import { useI18n, formatNumber } from "../lib/i18n";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/card";
-import { DomainTable } from "../components/DomainTable";
-import { api, type DomainRow } from "../lib/api";
-import { Activity, AlertCircle, Globe, ShieldCheck, XCircle } from "lucide-react";
-
-interface StatCardProps {
-  label: string;
-  value: number;
-  hint?: string;
-  icon: React.ReactNode;
-  tone?: "default" | "warning" | "danger" | "success";
+import { Link } from "react-router-dom";
+import { api, request } from "../lib/api";
+import { useI18n, errorMessage, formatNumber } from "../lib/i18n";
+import { formatDate } from "../lib/format";
+import type { Resource } from "./Resources";
+type Row = {
+  key: string;
+  title: string;
+  type: string;
+  expiry: string | null;
+  days: number | null;
+  status: string;
+  href: string;
+};
+function status(
+  enabled: boolean,
+  days: number | null,
+  perpetual = false,
+  invalid = false,
+) {
+  if (!enabled) return "Disabled";
+  if (perpetual) return "No expiry";
+  if (days === null) return "Unknown";
+  if (days <= 0) return "Expired";
+  if (invalid) return "Invalid";
+  return days <= 30 ? "Expiring soon" : "Healthy";
 }
-
-function StatCard({ label, value, hint, icon, tone = "default" }: StatCardProps) {
-  const { t } = useI18n();
-  const toneRing: Record<string, string> = {
-    default: "ring-slate-200",
-    warning: "ring-amber-200",
-    danger: "ring-rose-200",
-    success: "ring-emerald-200",
-  };
-  const toneIcon: Record<string, string> = {
-    default: "text-slate-500",
-    warning: "text-amber-500",
-    danger: "text-rose-500",
-    success: "text-emerald-500",
-  };
-  return (
-    <Card className={`ring-1 ${toneRing[tone]}`}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle>{label}</CardTitle>
-        <span className={toneIcon[tone]}>{icon}</span>
-      </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-semibold tracking-tight text-slate-900">
-          {formatNumber(value)}
-        </div>
-        {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
-      </CardContent>
-    </Card>
-  );
-}
-
 export function Dashboard() {
   const { t } = useI18n();
-  const dashboard = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => api.dashboard(),
+  const domains = useQuery({ queryKey: ["domains"], queryFn: api.listDomains });
+  const resources = useQuery({
+    queryKey: ["resources"],
+    queryFn: () => request<{ resources: Resource[] }>("/api/resources"),
   });
-
-  const domains = useQuery({
-    queryKey: ["domains"],
-    queryFn: async () => {
-      const r = await api.listDomains();
-      return r.domains;
-    },
-  });
-
-  const summary = dashboard.data;
-  const rows: DomainRow[] = domains.data ?? summary?.domains ?? [];
-
+  const [search, setSearch] = useState(""),
+    [type, setType] = useState(""),
+    [state, setState] = useState("");
+  const rows: Row[] = [];
+  for (const { domain: d, lastCheck: c } of domains.data?.domains || []) {
+    for (const cert of [true, false]) {
+      const days =
+        (cert ? c?.daysRemaining : c?.domainExpiresDaysRemaining) ?? null;
+      rows.push({
+        key: `domain:${d.id}:${cert}`,
+        title: d.hostname,
+        type: cert ? "Automatic SSL" : "Domain registration",
+        expiry: (cert ? c?.notAfter : c?.domainExpiresAt) ?? null,
+        days,
+        status: status(d.enabled, days, false, cert && c?.valid === false),
+        href: `/domains/${d.id}`,
+      });
+    }
+  }
+  for (const r of resources.data?.resources || []) {
+    const days = r.expiresAt
+      ? Math.ceil(
+          (Date.parse(r.expiresAt + "T23:59:59.999Z") - Date.now()) / 86400000,
+        )
+      : null;
+    rows.push({
+      key: `resource:${r.id}`,
+      title: r.title + (r.hostname ? ` (${r.hostname})` : ""),
+      type: {
+        license: "Software license",
+        api: "API expiry",
+        domain: "Manual domain",
+        cert: "Private SSL certificate",
+      }[r.kind],
+      expiry: r.expiresAt,
+      days,
+      status: status(r.enabled, days, r.kind === "license" && !r.expiresAt),
+      href: "/resources",
+    });
+  }
+  const statuses = [
+    "Healthy",
+    "Expiring soon",
+    "Expired",
+    "Unknown",
+    "Invalid",
+    "Disabled",
+    "No expiry",
+  ];
+  const visible = rows
+    .filter(
+      (r) =>
+        (!type || r.type === type) &&
+        (!state || r.status === state) &&
+        r.title.toLowerCase().includes(search.toLowerCase()),
+    )
+    .sort((a, b) => (a.days ?? Infinity) - (b.days ?? Infinity));
+  const loading = domains.isLoading || resources.isLoading;
+  const error = domains.error || resources.error;
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{t("Dashboard")}</h1>
-        <p className="text-sm text-slate-500">{t("Self-hosted SSL certificate and domain expiry monitoring.")}</p>
-      </div>
-
-      <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">{t("TLS certificates")}</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            label={t("Total Domains")}
-            value={summary?.total ?? rows.length}
-            hint={t("Being monitored")}
-            icon={<Activity className="h-5 w-5" />}
-          />
-          <StatCard
-            label={t("Cert Expiring Soon")}
-            value={summary?.expiringSoon ?? 0}
-            hint={t("≤ 30 days remaining")}
-            tone="warning"
-            icon={<AlertCircle className="h-5 w-5" />}
-          />
-          <StatCard
-            label={t("Cert Expired")}
-            value={summary?.expired ?? 0}
-            hint={t("Cert past expiry")}
-            tone="danger"
-            icon={<XCircle className="h-5 w-5" />}
-          />
-          <StatCard
-            label={t("Healthy")}
-            value={summary?.healthy ?? 0}
-            hint={t("> 30 days remaining")}
-            tone="success"
-            icon={<ShieldCheck className="h-5 w-5" />}
-          />
-        </div>
-      </div>
-
-      <div>
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">{t("Domain registration")}</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2">
-          <StatCard
-            label={t("Domain Expiring Soon")}
-            value={summary?.domainExpiringSoon ?? 0}
-            hint={t("≤ 30 days remaining")}
-            tone="warning"
-            icon={<Globe className="h-5 w-5" />}
-          />
-          <StatCard
-            label={t("Domain Expired")}
-            value={summary?.domainExpired ?? 0}
-            hint={t("Registration past expiry")}
-            tone="danger"
-            icon={<Globe className="h-5 w-5" />}
-          />
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("Domains")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {dashboard.isLoading || domains.isLoading ? (
-            <p className="py-8 text-center text-sm text-slate-500">{t("Loading…")}</p>
-          ) : (
-            <DomainTable rows={rows} />
-          )}
-        </CardContent>
-      </Card>
+      <h1 className="text-2xl font-semibold">{t("Dashboard")}</h1>
+      <p className="text-sm text-slate-500">
+        {t(
+          "All expiry records in one view. Automatic domains have separate SSL and registration entries.",
+        )}
+      </p>
+      {error ? (
+        <p role="alert">{errorMessage(error)}</p>
+      ) : loading ? (
+        <p>{t("Loading…")}</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {["All records", ...statuses].map((s) => (
+              <button
+                key={s}
+                className="panel text-start"
+                onClick={() => setState(s === "All records" ? "" : s)}
+              >
+                <span>{t(s)}</span>
+                <strong
+                  className={`block text-3xl ${s === "Expired" || s === "Invalid" ? "text-rose-500" : s === "Expiring soon" ? "text-amber-500" : ""}`}
+                >
+                  {formatNumber(
+                    s === "All records"
+                      ? rows.length
+                      : rows.filter((r) => r.status === s).length,
+                  )}
+                </strong>
+              </button>
+            ))}
+          </div>
+          <section className="panel space-y-4">
+            <div className="form-grid sm:grid-cols-3">
+              <label>
+                {t("Search")}
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </label>
+              <label>
+                {t("Type")}
+                <select value={type} onChange={(e) => setType(e.target.value)}>
+                  <option value="">{t("All")}</option>
+                  {[
+                    "Automatic SSL",
+                    "Domain registration",
+                    "Software license",
+                    "API expiry",
+                    "Manual domain",
+                    "Private SSL certificate",
+                  ].map((x) => (
+                    <option key={x} value={x}>
+                      {t(x)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t("Status")}
+                <select
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
+                >
+                  <option value="">{t("All")}</option>
+                  {statuses.map((x) => (
+                    <option key={x} value={x}>
+                      {t(x)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    {[
+                      "Item",
+                      "Type",
+                      "Expiry date",
+                      "Days remaining",
+                      "Status",
+                    ].map((x) => (
+                      <th key={x} className="p-3 text-start">
+                        {t(x)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((r) => (
+                    <tr
+                      key={r.key}
+                      className="border-t border-slate-200 dark:border-slate-700"
+                    >
+                      <td className="p-3">
+                        <Link
+                          className="text-blue-600 dark:text-blue-400"
+                          to={r.href}
+                        >
+                          <bdi>{r.title}</bdi>
+                        </Link>
+                      </td>
+                      <td className="p-3">{t(r.type)}</td>
+                      <td className="p-3">
+                        <bdi>{r.expiry ? formatDate(r.expiry) : "—"}</bdi>
+                      </td>
+                      <td className="p-3">
+                        {r.days === null ? "—" : formatNumber(r.days)}
+                      </td>
+                      <td className="p-3">{t(r.status)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!visible.length && <p>{t("No matching records")}</p>}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

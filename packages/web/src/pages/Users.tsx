@@ -1,3 +1,4 @@
+import { useAuth } from "../lib/auth";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { request, api } from "../lib/api";
@@ -7,6 +8,8 @@ import { useI18n, errorMessage } from "../lib/i18n";
 export function Users() {
   const { t } = useI18n(),
     cache = useQueryClient();
+  const currentUser = useAuth().data?.user;
+  const [showPassword, setShowPassword] = useState(false);
   const query = useQuery({
     queryKey: ["users"],
     queryFn: () => request<{ users: User[] }>("/api/users"),
@@ -30,7 +33,8 @@ export function Users() {
         <h1 className="text-2xl font-semibold">{t("Users & access")}</h1>
         <button
           className="primary"
-          onClick={() =>
+          onClick={() => {
+            setShowPassword(false);
             setEditing({
               id: 0,
               username: "",
@@ -43,8 +47,8 @@ export function Users() {
               canTest: false,
               domainIds: [],
               resourceIds: [],
-            })
-          }
+            });
+          }}
         >
           {t("Add user")}
         </button>
@@ -66,9 +70,38 @@ export function Users() {
             </div>
             <button
               className="secondary"
-              onClick={() => setEditing({ ...u, password: "" })}
+              onClick={() => {
+                setShowPassword(false);
+                setEditing({ ...u, password: "" });
+              }}
             >
               {t("Edit")}
+            </button>
+            <button
+              className="secondary text-rose-600"
+              disabled={busy || u.id === currentUser?.id}
+              onClick={async () => {
+                if (
+                  window.prompt(
+                    t(
+                      "Type the username to delete this account. Monitored items will be kept.",
+                    ),
+                  ) !== u.username
+                )
+                  return;
+                setBusy(true);
+                try {
+                  await request(`/api/users/${u.id}`, { method: "DELETE" });
+                  if (editing?.id === u.id) setEditing(null);
+                  await cache.invalidateQueries({ queryKey: ["users"] });
+                } catch (e) {
+                  setError(errorMessage(e));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {t("Delete")}
             </button>
           </section>
         ))}
@@ -132,7 +165,7 @@ export function Users() {
               )}
               <input
                 required={!editing.id}
-                type="password"
+                type={showPassword ? "text" : "password"}
                 minLength={12}
                 autoComplete="new-password"
                 value={editing.password}
@@ -140,6 +173,14 @@ export function Users() {
                   setEditing({ ...editing, password: e.target.value })
                 }
               />
+            </label>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={showPassword}
+                onChange={(e) => setShowPassword(e.target.checked)}
+              />
+              {t("Show password")}
             </label>
             <label>
               {t("Role")}

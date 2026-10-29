@@ -37,7 +37,11 @@ export interface SendResult {
 
 export interface AlertChannelSender {
   readonly channel: ChannelName;
-  send(content: AlertContent, config: Record<string, unknown>, env: NodeJS.ProcessEnv): Promise<SendResult>;
+  send(
+    content: AlertContent,
+    config: Record<string, unknown>,
+    env: NodeJS.ProcessEnv,
+  ): Promise<SendResult>;
 }
 
 // ---------- Email (Resend) ----------
@@ -48,11 +52,63 @@ class ResendEmailSender implements AlertChannelSender {
   constructor(apiKey: string | undefined) {
     this.apiKey = apiKey;
   }
-  async send(content: AlertContent, config: Record<string, unknown>): Promise<SendResult> {
-    const to = typeof config.to === "string" ? config.to : (process.env.ALERT_EMAIL_TO ?? "");
-    const from = typeof config.from === "string" ? config.from : (process.env.ALERT_EMAIL_FROM ?? "sslert@localhost");
+  async send(
+    content: AlertContent,
+    config: Record<string, unknown>,
+  ): Promise<SendResult> {
+    const to =
+      typeof config.to === "string"
+        ? config.to
+        : (process.env.ALERT_EMAIL_TO ?? "");
+    const from =
+      typeof config.from === "string"
+        ? config.from
+        : (process.env.ALERT_EMAIL_FROM ?? "sslert@localhost");
     if (!to) return { error: "No destination email configured" };
-    if (!this.apiKey) {
+    if (config.emailProvider === "smtp") {
+      const { default: nodemailer } = await import("nodemailer");
+      const transport = nodemailer.createTransport({
+        host: String(config.smtpHost),
+        port: Number(config.smtpPort),
+        secure: config.smtpSecurity === "tls",
+        requireTLS: config.smtpSecurity === "starttls",
+        ignoreTLS: config.smtpSecurity === "none",
+        auth: config.smtpAuth
+          ? {
+              user: String(config.smtpUsername),
+              pass: String(config.smtpPassword),
+            }
+          : undefined,
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 20000,
+        disableFileAccess: true,
+        disableUrlAccess: true,
+      });
+      try {
+        const result = await transport.sendMail({
+          from: {
+            name: String(config.senderName || "Bamdad Alert"),
+            address: from,
+          },
+          to,
+          subject: content.subject,
+          text: content.text,
+        });
+        return result.accepted.length
+          ? { id: result.messageId }
+          : { error: "SMTP recipient rejected" };
+      } catch {
+        return { error: "SMTP delivery failed" };
+      } finally {
+        transport.close();
+      }
+    }
+    const apiKey =
+      typeof config.resendApiKey === "string" && config.resendApiKey
+        ? config.resendApiKey
+        : this.apiKey;
+    if (!apiKey) {
       // Log to stdout via pino — keeps the old fallback behaviour.
       // Pino's redaction list scrubs `to`/`from` so we don't
       // accidentally capture the recipient's email in a structured
@@ -64,9 +120,14 @@ class ResendEmailSender implements AlertChannelSender {
     }
     try {
       const { Resend } = await import("resend");
-      const resend = new Resend(this.apiKey);
+      const resend = new Resend(apiKey);
       const { data, error } = await resend.emails.send({
-        from,
+        from: config.senderName
+          ? String(config.senderName).replace(/[<>\r\n"]/g, "") +
+            " <" +
+            from +
+            ">"
+          : from,
         to,
         subject: content.subject,
         text: content.text,
@@ -83,7 +144,10 @@ class ResendEmailSender implements AlertChannelSender {
 
 class WebhookSender implements AlertChannelSender {
   readonly channel: ChannelName = "webhook";
-  async send(content: AlertContent, config: Record<string, unknown>): Promise<SendResult> {
+  async send(
+    content: AlertContent,
+    config: Record<string, unknown>,
+  ): Promise<SendResult> {
     const url = typeof config.url === "string" ? config.url : "";
     if (!url) return { error: "webhook URL not configured" };
     // SSRF + scheme guard (H-1). Re-validated at send time because a
@@ -103,12 +167,16 @@ class WebhookSender implements AlertChannelSender {
     // (zod enforces 16-256 chars at write time; we re-check at send
     // time so a corrupted/empty DB value never produces a signature).
     const body = JSON.stringify(payload);
-    const secret = typeof config.secret === "string" && config.secret.length > 0
-      ? config.secret
-      : null;
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const secret =
+      typeof config.secret === "string" && config.secret.length > 0
+        ? config.secret
+        : null;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
     if (secret) {
-      const signature = "sha256=" + createHmac("sha256", secret).update(body).digest("hex");
+      const signature =
+        "sha256=" + createHmac("sha256", secret).update(body).digest("hex");
       const timestamp = Math.floor(Date.now() / 1000).toString();
       headers["X-SSLert-Signature"] = signature;
       headers["X-SSLert-Timestamp"] = timestamp;
@@ -126,7 +194,9 @@ class WebhookSender implements AlertChannelSender {
         // error message — defends against log-injection if this string
         // ever ends up in a structured log.
         const sanitized = body.replace(/[\r\n]/g, " ").slice(0, 100);
-        return { error: `Webhook HTTP ${res.status}${sanitized ? `: ${sanitized}` : ""}` };
+        return {
+          error: `Webhook HTTP ${res.status}${sanitized ? `: ${sanitized}` : ""}`,
+        };
       }
       return { id: `webhook-${res.status}` };
     } catch (err) {
@@ -139,11 +209,15 @@ class WebhookSender implements AlertChannelSender {
 
 class TelegramSender implements AlertChannelSender {
   readonly channel: ChannelName = "telegram";
-  async send(content: AlertContent, config: Record<string, unknown>): Promise<SendResult> {
+  async send(
+    content: AlertContent,
+    config: Record<string, unknown>,
+  ): Promise<SendResult> {
     const botToken = typeof config.botToken === "string" ? config.botToken : "";
-    const chatId = typeof config.chatId === "string" || typeof config.chatId === "number"
-      ? String(config.chatId)
-      : "";
+    const chatId =
+      typeof config.chatId === "string" || typeof config.chatId === "number"
+        ? String(config.chatId)
+        : "";
     if (!botToken) return { error: "Telegram botToken not configured" };
     if (!chatId) return { error: "Telegram chatId not configured" };
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
@@ -172,8 +246,12 @@ class TelegramSender implements AlertChannelSender {
         const sanitized = body.replace(/[\r\n]/g, " ").slice(0, 100);
         return { error: `Telegram HTTP ${res.status}: ${sanitized}` };
       }
-      const data = (await res.json().catch(() => null)) as { result?: { message_id?: number } } | null;
-      return { id: data?.result?.message_id ? `tg-${data.result.message_id}` : "tg-ok" };
+      const data = (await res.json().catch(() => null)) as {
+        result?: { message_id?: number };
+      } | null;
+      return {
+        id: data?.result?.message_id ? `tg-${data.result.message_id}` : "tg-ok",
+      };
     } catch (err) {
       return { error: err instanceof Error ? err.message : String(err) };
     }
@@ -184,14 +262,18 @@ class TelegramSender implements AlertChannelSender {
 
 class SlackSender implements AlertChannelSender {
   readonly channel: ChannelName = "slack";
-  async send(content: AlertContent, config: Record<string, unknown>): Promise<SendResult> {
+  async send(
+    content: AlertContent,
+    config: Record<string, unknown>,
+  ): Promise<SendResult> {
     const url = typeof config.url === "string" ? config.url : "";
     if (!url) return { error: "Slack webhook URL not configured" };
     // SSRF + scheme guard (H-1) — Slack URLs should always be https to
     // hooks.slack.com, but we let validateWebhookUrl enforce it.
     const v = await validateWebhookUrl(url);
     if (!v.ok) return { error: v.error ?? "Invalid Slack URL" };
-    const emoji = content.source === "domain" ? ":globe_with_meridians:" : ":lock:";
+    const emoji =
+      content.source === "domain" ? ":globe_with_meridians:" : ":lock:";
     const payload = {
       text: `${emoji} *${content.subject}*\n\`${content.hostname}\`\n${content.text}`,
     };
@@ -218,11 +300,17 @@ class SlackSender implements AlertChannelSender {
 
 class NtfySender implements AlertChannelSender {
   readonly channel: ChannelName = "ntfy";
-  async send(content: AlertContent, config: Record<string, unknown>): Promise<SendResult> {
+  async send(
+    content: AlertContent,
+    config: Record<string, unknown>,
+  ): Promise<SendResult> {
     // Allow `topic` shorthand (https://ntfy.sh/<topic>) or full `url`.
     let url = typeof config.url === "string" ? config.url : "";
     if (!url && typeof config.topic === "string" && config.topic) {
-      const server = typeof config.server === "string" && config.server ? config.server.replace(/\/$/, "") : "https://ntfy.sh";
+      const server =
+        typeof config.server === "string" && config.server
+          ? config.server.replace(/\/$/, "")
+          : "https://ntfy.sh";
       url = `${server}/${config.topic}`;
     }
     if (!url) return { error: "ntfy topic or URL not configured" };
@@ -230,15 +318,19 @@ class NtfySender implements AlertChannelSender {
     // can self-host — the guard ensures we never POST to a private target.
     const v = await validateWebhookUrl(url);
     if (!v.ok) return { error: v.error ?? "Invalid ntfy URL" };
-    const priority = content.level === "emergency" || content.level === "critical" ? "5" : "3";
-    const tags = content.source === "domain" ? "globe_with_meridians,rotating_light" : "lock,rotating_light";
+    const priority =
+      content.level === "emergency" || content.level === "critical" ? "5" : "3";
+    const tags =
+      content.source === "domain"
+        ? "globe_with_meridians,rotating_light"
+        : "lock,rotating_light";
     try {
       const res = await fetch(url, {
         method: "POST",
         headers: {
-          "Title": content.subject,
-          "Priority": priority,
-          "Tags": tags,
+          Title: content.subject,
+          Priority: priority,
+          Tags: tags,
           "Content-Type": "text/plain",
         },
         body: content.text,
@@ -273,7 +365,7 @@ const senders: Record<ChannelName, AlertChannelSender> = {
  */
 export function setChannelSender(
   name: ChannelName,
-  sender: AlertChannelSender
+  sender: AlertChannelSender,
 ): void {
   senders[name] = sender;
 }

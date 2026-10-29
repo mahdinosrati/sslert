@@ -310,6 +310,36 @@ export function createAccountRouter(db: DB) {
     audit(c, db, "user.create", user.id, { role: user.role });
     return c.json({ user: publicUser(user) }, 201);
   });
+  app.delete("/users/:id", (c) => {
+    const id = Number(c.req.param("id"));
+    const actor = c.get("actor")!;
+    if (actor.role !== "admin")
+      return c.json({ error: "Administrator access required" }, 403);
+    if (id === actor.userId)
+      return c.json({ error: "Cannot delete your own account" }, 409);
+    const result = db.transaction((tx) => {
+      const user = tx.select().from(users).where(eq(users.id, id)).get();
+      if (!user) return "missing";
+      if (
+        user.role === "admin" &&
+        user.enabled &&
+        tx
+          .select()
+          .from(users)
+          .where(and(eq(users.role, "admin"), eq(users.enabled, true)))
+          .all().length <= 1
+      )
+        return "last";
+      revokeUserAccess(tx, id);
+      tx.delete(users).where(eq(users.id, id)).run();
+      return "ok";
+    });
+    if (result === "missing") return c.json({ error: "Not found" }, 404);
+    if (result === "last")
+      return c.json({ error: "Cannot delete the last administrator" }, 409);
+    audit(c, db, "user.delete", id);
+    return c.json({ ok: true });
+  });
   app.patch("/users/:id", async (c) => {
     const id = Number(c.req.param("id"));
     const parsed = z
