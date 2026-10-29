@@ -91,9 +91,12 @@ jobs:
       - name: Capture manual tag input (workflow_dispatch only)
         id: manual-tag
         if: github.event_name == 'workflow_dispatch' && inputs.tag != ''
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
         run: |
-          echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          echo "MANUAL_TAG=${{ inputs.tag }}" >> "$GITHUB_ENV"
+          [[ "$REQUESTED_TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 2
+          echo "tag=${REQUESTED_TAG}" >> "$GITHUB_OUTPUT"
+          echo "MANUAL_TAG=${REQUESTED_TAG}" >> "$GITHUB_ENV"
 
       - name: Determine effective tags
         id: effective-tags
@@ -106,7 +109,7 @@ jobs:
         run: |
           if [ -n "${MANUAL_TAG:-}" ]; then
             {
-              echo "tags=ghcr.io/mahdinosrati/sslert:${MANUAL_TAG}"
+              echo "tags=ghcr.io/mahdinosrati/sslert:${MANUAL_TAG}" >> "$GITHUB_OUTPUT"
               echo "## Effective tags" >> "$GITHUB_STEP_SUMMARY"
               echo "ghcr.io/mahdinosrati/sslert:${MANUAL_TAG}" >> "$GITHUB_STEP_SUMMARY"
             }
