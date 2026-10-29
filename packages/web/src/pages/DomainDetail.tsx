@@ -1,8 +1,9 @@
+import { useEffect } from "react";
 import { useAuth, permits } from "../lib/auth";
 import { NotificationPolicy } from "./Notifications";
 import { useI18n, formatNumber, errorMessage } from "../lib/i18n";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, useLocation, Link } from "react-router-dom";
 import {
   ArrowLeft,
   RefreshCw,
@@ -46,6 +47,13 @@ export function DomainDetail() {
     enabled: !Number.isNaN(domainId) && domainId > 0,
   });
 
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === "#notifications" && detail.data)
+      document
+        .getElementById("notifications")
+        ?.scrollIntoView({ block: "start" });
+  }, [location.hash, detail.data]);
   const checkMutation = useMutation({
     mutationFn: () => api.checkNow(domainId),
     onSuccess: () => {
@@ -340,7 +348,9 @@ export function DomainDetail() {
           </CardContent>
         </Card>
 
-        <NotificationPolicy targetKey={`domain:${domainId}`} />
+        <div id="notifications">
+          <NotificationPolicy targetKey={`domain:${domainId}`} />
+        </div>
       </div>
     </div>
   );

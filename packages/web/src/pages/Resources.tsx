@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { request } from "../lib/api";
 import { useI18n, errorMessage, formatNumber } from "../lib/i18n";
@@ -36,6 +37,25 @@ export function Resources() {
     [selected, setSelected] = useState<number | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const id = Number(params.get("item"));
+    if (!id || !query.data) return;
+    const row = query.data.resources.find((r) => r.id === id);
+    if (!row) return;
+    if (params.get("action") === "edit" && permits(user, "canEdit"))
+      setEditing({ ...row });
+    if (params.get("action") === "alerts") setSelected(id);
+    const action = params.get("action");
+    setParams({}, { replace: true });
+    requestAnimationFrame(() =>
+      document
+        .getElementById(
+          action === "edit" ? "resource-editor" : "resource-" + id,
+        )
+        ?.scrollIntoView({ block: "start" }),
+    );
+  }, [params, query.data, user, setParams]);
   const blank: Resource = {
     id: 0,
     hostname: "",
@@ -71,7 +91,7 @@ export function Resources() {
       )}
       {query.isError && <p role="alert">{errorMessage(query.error)}</p>}
       {editing && (
-        <section className="panel">
+        <section id="resource-editor" className="panel">
           <form
             className="form-grid"
             onSubmit={async (e) => {
@@ -273,7 +293,11 @@ export function Resources() {
               )
             : null;
           return (
-            <section key={r.id} className="panel space-y-3">
+            <section
+              id={`resource-${r.id}`}
+              key={r.id}
+              className="panel space-y-3 scroll-mt-6"
+            >
               <div className="flex justify-between gap-3">
                 <h2 className="break-words text-xl font-semibold">{r.title}</h2>
                 <span className="text-sm text-slate-500">

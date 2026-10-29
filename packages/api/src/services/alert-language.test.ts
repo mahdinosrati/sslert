@@ -37,6 +37,11 @@ describe("localized alert messages", () => {
     expect(sendEmail).toHaveBeenCalledWith({ to: "test@example.com", from: "sslert@example.com", subject: content.subject, text: content.text });
   });
 
+  it("sends all normalized recipients to Resend",async()=>{
+    setEmailApiKey("test-only-key");
+    await getChannelSender("email").send(base,{to:"one@example.com, two@example.com",from:"sender@example.com"},{});
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({to:["one@example.com","two@example.com"]}));
+  });
   it("preserves Persian text and escapes HTML in Telegram delivery", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ result: { message_id: 1 } }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);

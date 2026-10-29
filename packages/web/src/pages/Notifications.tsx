@@ -236,15 +236,17 @@ export function Notifications() {
                         t(
                           r.status === "sent"
                             ? "Accepted by delivery service"
-                            : r.status === "logged"
-                              ? "Logged only. Configure RESEND_API_KEY on the server to send email."
-                              : "Please wait 30 seconds before testing again.",
+                            : r.status === "partial"
+                              ? "Some recipients were rejected by the email server."
+                              : r.status === "logged"
+                                ? "Logged only. Configure RESEND_API_KEY on the server to send email."
+                                : "Please wait 30 seconds before testing again.",
                         ),
                       );
                     })
                   }
                 >
-                  {t("Send test")}
+                  {t(c.channel === "email" ? "Send test email" : "Send test")}
                 </button>
               )}
               {admin && (
@@ -527,8 +529,36 @@ export function Notifications() {
                 )}
               </>
             )}
+            {editing.channel === "email" && (
+              <label>
+                {t("Recipient emails")}
+                <textarea
+                  aria-label={t("Recipient emails")}
+                  required
+                  dir="ltr"
+                  rows={3}
+                  placeholder="first@example.com, second@example.com"
+                  value={
+                    Array.isArray(editing.config.to)
+                      ? editing.config.to.join("\n")
+                      : editing.config.to || ""
+                  }
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      config: { ...editing.config, to: e.target.value },
+                    })
+                  }
+                />
+                <span className="text-sm text-slate-500">
+                  {t(
+                    "Enter up to 50 email addresses, separated by commas or new lines. The test sends to all saved recipients.",
+                  )}
+                </span>
+              </label>
+            )}
             {(editing.channel === "email"
-              ? ["to", "from"]
+              ? ["from"]
               : editing.channel === "telegram"
                 ? ["botToken", "chatId"]
                 : editing.channel === "ntfy"
@@ -620,7 +650,7 @@ export function Notifications() {
               setHistoryPage(0);
             }}
           >
-            {["", "sent", "failed", "logged", "pending"].map((x) => (
+            {["", "sent", "partial", "failed", "logged", "pending"].map((x) => (
               <option key={x} value={x}>
                 {t(x || "All")}
               </option>

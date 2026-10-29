@@ -208,9 +208,11 @@ export async function sendConnection(
     ).send(content, config, process.env);
     status = result.error
       ? "failed"
-      : result.id?.startsWith("log-")
-        ? "logged"
-        : "sent";
+      : result.partial
+        ? "partial"
+        : result.id?.startsWith("log-")
+          ? "logged"
+          : "sent";
   } catch {
     status = "failed";
   }
@@ -221,7 +223,9 @@ export async function sendConnection(
       error:
         status === "failed"
           ? "Delivery failed. Check connection settings."
-          : null,
+          : status === "partial"
+            ? "Some recipients were rejected by the email server."
+            : null,
     })
     .where(eq(deliveries.id, claim.id))
     .run();

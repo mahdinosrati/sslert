@@ -22,7 +22,11 @@ import {
 import { __resetRateLimiterForTests } from "../middleware/rate-limit.js";
 import { eq } from "drizzle-orm";
 const send = vi.hoisted(() =>
-  vi.fn(async (..._args: any[]) => ({ id: "sent-1" })),
+  vi.fn(
+    async (..._args: any[]): Promise<{ id: string; partial?: boolean }> => ({
+      id: "sent-1",
+    }),
+  ),
 );
 vi.mock("../services/channels.js", () => ({
   getChannelSender: () => ({ send }),
@@ -614,5 +618,106 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
         ).json()
       ).deliveries,
     ).toHaveLength(1);
+  });
+
+  it("reports scoped effective alert coverage without secrets", async () => {
+    const c = await admin();
+    const { u, cookie } = await ordinary();
+    const r = store.db
+      .insert(resources)
+      .values({ kind: "license", title: "Assigned" })
+      .returning()
+      .get()!;
+    const hidden = store.db
+      .insert(resources)
+      .values({ kind: "license", title: "Hidden" })
+      .returning()
+      .get()!;
+    store.db
+      .insert(userResources)
+      .values({ userId: u.id, resourceId: r.id })
+      .run();
+    const conn = store.db
+      .insert(connections)
+      .values({
+        name: "SMTP",
+        channel: "email",
+        enabled: true,
+        config: JSON.stringify({
+          emailProvider: "smtp",
+          smtpPassword: "secret",
+        }),
+      })
+      .returning()
+      .get()!;
+    store.db
+      .update(notificationPolicies)
+      .set({ connectionIds: JSON.stringify([conn.id]) })
+      .where(eq(notificationPolicies.key, "global"))
+      .run();
+    const result = await (
+      await req("/notifications/coverage", "GET", undefined, cookie)
+    ).json();
+    expect(result.coverage).toEqual({ ["resource:" + r.id]: true });
+    expect(JSON.stringify(result)).not.toContain("secret");
+    expect(
+      (await (await req("/notifications/coverage", "GET", undefined, c)).json())
+        .coverage["resource:" + hidden.id],
+    ).toBe(true);
+    store.db
+      .update(connections)
+      .set({ enabled: false })
+      .where(eq(connections.id, conn.id))
+      .run();
+    expect(
+      (
+        await (
+          await req("/notifications/coverage", "GET", undefined, cookie)
+        ).json()
+      ).coverage["resource:" + r.id],
+    ).toBe(false);
+  });
+  it("saves multiple recipients and tests the complete saved list", async () => {
+    const c = await admin();
+    const body = {
+      name: "Team",
+      channel: "email",
+      enabled: true,
+      shared: false,
+      config: {
+        to: "one@example.com, two@example.com\none@example.com",
+        from: "sender@example.com",
+      },
+    };
+    const response = await req("/notifications/connections", "POST", body, c);
+    expect(response.status).toBe(200);
+    const connection = (await response.json()).connection;
+    expect(connection.config.to).toEqual([
+      "one@example.com",
+      "two@example.com",
+    ]);
+    send.mockResolvedValueOnce({ id: "partial-delivery", partial: true });
+    await req(
+      "/notifications/connections/" + connection.id + "/test",
+      "POST",
+      {},
+      c,
+    );
+    expect(send.mock.calls.at(-1)?.[1]).toMatchObject({
+      to: ["one@example.com", "two@example.com"],
+    });
+    expect(store.db.select().from(deliveries).all().at(-1)?.status).toBe(
+      "partial",
+    );
+    expect(
+      (
+        await req(
+          "/notifications/connections",
+          "POST",
+          { ...body, config: { to: "bad,email" } },
+          c,
+        )
+      ).status,
+    ).toBe(400);
   });
 });

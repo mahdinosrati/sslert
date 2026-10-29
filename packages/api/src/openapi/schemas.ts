@@ -82,7 +82,7 @@ export const checkSchema = z
 export const channelConfigSchema = z
   .object({
     url: z.string().url().optional(),
-    to: z.string().optional(),
+    to: z.union([z.string(), z.array(z.string()).max(50)]).optional(),
     from: z.string().optional(),
     botToken: z.string().optional(),
     chatId: z.union([z.string(), z.number()]).optional(),

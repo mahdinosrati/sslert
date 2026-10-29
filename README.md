@@ -1,8 +1,8 @@
-# Bamdad Alert 1.0.3
+# Bamdad Alert 1.0.4
 
 Self-hosted monitoring for SSL certificates, domain registrations, software licenses and API expiry dates. Built for the Bamdad Information Technology Group.
 
-[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.3.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
+[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.4.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
 
 English is the default. Persian includes RTL layout and bundled Vazir fonts. Choose light, dark or system appearance. The bilingual About page credits Mahdi Nosrati and links to [mahdinosrati07@gmail.com](mailto:mahdinosrati07@gmail.com).
 
@@ -11,7 +11,7 @@ English is the default. Persian includes RTL layout and bundled Vazir fonts. Cho
 Install Docker Engine and Compose v2 using the [official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/), then:
 
 ```bash
-git clone --branch v1.0.3 https://github.com/mahdinosrati/sslert.git
+git clone --branch v1.0.4 https://github.com/mahdinosrati/sslert.git
 cd sslert
 cp .env.example .env
 chmod 600 .env
@@ -75,7 +75,7 @@ Saving in the UI does not change the active port. The script checks availability
 
 ## Upgrade and rollback
 
-Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.3`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
+Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.4`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
 
 Migrations preserve old domains, checks and channels. Existing receiver configurations become per-domain custom policies; global email fallback is imported where applicable. Subsequent connection changes belong in the central Notifications UI. Legacy `/domains/:id/channels` configuration is retired after migration.
 
@@ -128,3 +128,13 @@ In Notifications, choose Email → SMTP, enter host, port, TLS mode, optional au
 Resend remains available, with a per-connection API key or the server `RESEND_API_KEY` fallback. Without a key, Resend-mode delivery is logged only. SMTP passwords and per-connection Resend keys are encrypted with AES-256-GCM and never returned by the API. Blank password edits preserve the saved value; disabling SMTP authentication removes its password. The key is generated beside the database as `notification.key` (Docker: `/app/data/notification.key`). Securely preserve it separately with database backups; the legacy backup CLI does not export it. Losing the key requires re-entering connection credentials.
 
 History includes target/connection names, channel, time and result, with status filtering and 50-row pagination. Accepted means the delivery service accepted the message, not guaranteed inbox delivery. Users see history only for assigned targets.
+
+## 1.0.4: action-oriented dashboard and multiple email recipients
+
+The dashboard separates unique host counts from expiry records, shows non-overlapping 1–7 and 8–30 day cards, highlights actionable records, and offers clickable 1–7/8–30/31–60/61–90 day bars. Disabled items are excluded from future-expiry bins. The table supports search, type/status filters, sortable columns and 15-row pages, with direct resource edit/policy links. Latest checks and delivery activity retain user access restrictions.
+
+Alert coverage reflects the effective global/custom policy and enabled connections; Resend without an API key is not counted as active delivery coverage. Coverage does not guarantee successful delivery.
+
+Email connections accept 1–50 recipients as an address array or comma/semicolon/newline-separated text. Invalid addresses are rejected and duplicates removed. Existing single-address connections remain compatible. Save the connection, then select **Send test email** to test all saved recipients (30-second cooldown). SMTP partial rejection is recorded as `partial`, not success. Recipients are included in To and can see the other addresses. Delivery-service acceptance does not guarantee inbox placement.
+
+New endpoint: `GET /api/notifications/coverage` returns scoped target-key → boolean coverage without connection secrets. `GET /api/notifications/history?status=partial` filters partial deliveries.

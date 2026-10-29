@@ -120,6 +120,16 @@ test.beforeEach(async ({ page }) => {
       body = { ok: true };
     } else if (path === "/api/domains")
       body = { domains: [{ domain, lastCheck: check }] };
+    else if (path === "/api/notifications/coverage")
+      body = {
+        coverage: {
+          "domain:1": true,
+          "resource:1": true,
+          "resource:2": false,
+          "resource:3": true,
+          "resource:4": false,
+        },
+      };
     else if (path === "/api/dashboard")
       body = {
         total: 1,
@@ -163,6 +173,9 @@ test.beforeEach(async ({ page }) => {
           {
             id: 1,
             targetKey: "domain:1",
+            targetName: "example.com",
+            connectionName: "ایمیل تیم فناوری اطلاعات",
+            channel: "email",
             source: "cert",
             status: "sent",
             createdAt: check.checkedAt,
@@ -305,7 +318,7 @@ test("test notification button works independently of expiry", async ({
   await login(page);
   await page.goto("/notifications");
   await page
-    .getByRole("button", { name: "Send test", exact: true })
+    .getByRole("button", { name: "Send test email", exact: true })
     .first()
     .click();
   await expect(page.getByRole("status").first()).toHaveText(
@@ -396,6 +409,9 @@ test("documentation screenshots in light and dark themes", async ({
       .click();
     await page.getByLabel("روش ارسال ایمیل").selectOption("smtp");
     await page.getByLabel("سرور SMTP").fill("mail.internal.example");
+    await page
+      .getByLabel("ایمیل‌های گیرنده", { exact: true })
+      .fill("operations@example.com\nadmin@example.com");
     await page.getByLabel("احراز هویت SMTP", { exact: true }).check();
     await page.screenshot({
       path: resolve(folder, `smtp${theme === "dark" ? "-dark" : ""}.png`),
@@ -473,16 +489,20 @@ test("manual organizational SSL form submits certificate metadata", async ({
 test("unified dashboard filters manual records", async ({ page }) => {
   await login(page);
   await expect(
-    page.getByText("لایسنس سامانه پشتیبان‌گیری", { exact: true }),
+    page
+      .getByRole("table")
+      .getByText("لایسنس سامانه پشتیبان‌گیری", { exact: true }),
   ).toBeVisible();
   await page
     .getByRole("combobox", { name: "Type", exact: true })
     .selectOption("API expiry");
   await expect(
-    page.getByText("اعتبار سرویس API", { exact: true }),
+    page.getByRole("table").getByText("اعتبار سرویس API", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("لایسنس سامانه پشتیبان‌گیری", { exact: true }),
+    page
+      .getByRole("table")
+      .getByText("لایسنس سامانه پشتیبان‌گیری", { exact: true }),
   ).toHaveCount(0);
 });
 test("SMTP form submits defaults without secret markers", async ({ page }) => {
@@ -494,7 +514,7 @@ test("SMTP form submits defaults without secret markers", async ({ page }) => {
   await page.getByLabel("Name", { exact: true }).fill("Internal email");
   await page.getByLabel("Email provider").selectOption("smtp");
   await page.getByLabel("SMTP host").fill("mail.internal");
-  await page.getByLabel("Recipient email").fill("to@example.com");
+  await page.getByLabel("Recipient emails").fill("to@example.com");
   await page.getByLabel("Sender email").fill("from@example.com");
   await page.getByLabel("SMTP authentication", { exact: true }).check();
   await page.getByLabel("SMTP username").fill("sender");
@@ -521,4 +541,99 @@ test("user creation password visibility", async ({ page }) => {
   await expect(password).toHaveAttribute("type", "text");
   await page.getByLabel("Show password", { exact: true }).uncheck();
   await expect(password).toHaveAttribute("type", "password");
+});
+
+test("dashboard time bins, sorting and resource actions", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-28T12:00:00Z"));
+  await login(page);
+  await page.getByRole("button", { name: /Due in 1–7 days/ }).click();
+  await expect(
+    page.getByRole("table").getByText("اعتبار سرویس API", { exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await page.getByRole("table").getByRole("button", { name: /Item/ }).click();
+  const row = page.getByRole("row").filter({ hasText: "اعتبار سرویس API" });
+  await row.getByRole("link", { name: "Notifications", exact: true }).click();
+  await expect(
+    page.getByText("Notification policy", { exact: true }),
+  ).toBeVisible();
+  await page.goto("/");
+  await page
+    .getByRole("row")
+    .filter({ hasText: "اعتبار سرویس API" })
+    .getByRole("link", { name: "Edit", exact: true })
+    .click();
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue(
+    "اعتبار سرویس API",
+  );
+  await page.goto("/");
+  await page
+    .getByRole("row")
+    .filter({ hasText: "example.com" })
+    .first()
+    .getByRole("link", { name: "Notifications", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Notification policy", exact: true }),
+  ).toBeInViewport();
+});
+test("dashboard pagination and search reset the current page", async ({
+  page,
+}) => {
+  await page.route("**/api/resources", (route) =>
+    route.fulfill({
+      json: {
+        resources: Array.from({ length: 20 }, (_, i) => ({
+          id: 100 + i,
+          kind: "license",
+          title: "Pagination record " + i,
+          expiresAt: null,
+          enabled: true,
+        })),
+      },
+    }),
+  );
+  await login(page);
+  await expect(page.getByRole("table").getByRole("row")).toHaveCount(16);
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByRole("table").getByRole("row")).toHaveCount(8);
+  await page
+    .getByRole("textbox", { name: "Search", exact: true })
+    .fill("Pagination record 19");
+  await expect(page.getByRole("table").getByRole("row")).toHaveCount(2);
+  await expect(
+    page.getByRole("button", { name: "Previous", exact: true }),
+  ).toBeDisabled();
+});
+test("email test targets every saved recipient", async ({ page }) => {
+  await login(page);
+  await page.goto("/notifications");
+  await page
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
+  await page.getByLabel("Name", { exact: true }).fill("Multiple recipients");
+  await page
+    .getByLabel("Recipient emails", { exact: true })
+    .fill("one@example.com\ntwo@example.com");
+  const save = page.waitForRequest(
+    (r) =>
+      r.method() === "POST" &&
+      r.url().endsWith("/api/notifications/connections"),
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).first().click();
+  expect((await save).postDataJSON().config.to).toContain("two@example.com");
+  const testRequest = page.waitForRequest((r) =>
+    r.url().endsWith("/api/notifications/connections/3/test"),
+  );
+  await page
+    .locator("section")
+    .filter({ has: page.getByText("Multiple recipients", { exact: true }) })
+    .getByRole("button", { name: "Send test email", exact: true })
+    .click();
+  expect((await testRequest).method()).toBe("POST");
+  await expect(page.getByRole("status").first()).toHaveText(
+    "Accepted by delivery service",
+  );
 });

@@ -1,3 +1,4 @@
+import { recipientsSchema } from "./email-recipients.js";
 /**
  * Alert channel senders.
  *
@@ -33,6 +34,7 @@ export interface AlertContent {
 export interface SendResult {
   id?: string;
   error?: string;
+  partial?: boolean;
 }
 
 export interface AlertChannelSender {
@@ -56,10 +58,12 @@ class ResendEmailSender implements AlertChannelSender {
     content: AlertContent,
     config: Record<string, unknown>,
   ): Promise<SendResult> {
-    const to =
-      typeof config.to === "string"
-        ? config.to
-        : (process.env.ALERT_EMAIL_TO ?? "");
+    const parsedRecipients = recipientsSchema.safeParse(
+      config.to ?? process.env.ALERT_EMAIL_TO ?? "",
+    );
+    if (!parsedRecipients.success)
+      return { error: "Invalid recipient email addresses" };
+    const to = parsedRecipients.data;
     const from =
       typeof config.from === "string"
         ? config.from
@@ -96,7 +100,7 @@ class ResendEmailSender implements AlertChannelSender {
           text: content.text,
         });
         return result.accepted.length
-          ? { id: result.messageId }
+          ? { id: result.messageId, partial: result.rejected.length > 0 }
           : { error: "SMTP recipient rejected" };
       } catch {
         return { error: "SMTP delivery failed" };

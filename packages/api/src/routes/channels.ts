@@ -1,3 +1,4 @@
+import { recipientsSchema } from "../services/email-recipients.js";
 import type { RequestActor } from "../middleware/auth.js";
 import { domainScope, canAccessDomain } from "../middleware/permissions.js";
 import { Hono } from "hono";
@@ -45,7 +46,7 @@ export const channelConfigSchema = z
     smtpPassword: z.string().max(4096).optional(),
     resendApiKey: z.string().max(4096).optional(),
     url: z.string().url().optional(),
-    to: z.string().email().optional(),
+    to: recipientsSchema.optional(),
     from: z.string().optional(),
     botToken: z.string().optional(),
     chatId: z.union([z.string(), z.number()]).optional(),

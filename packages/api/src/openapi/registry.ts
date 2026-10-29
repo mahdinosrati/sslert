@@ -99,7 +99,7 @@ export function buildOpenApiDocument(baseUrl: string) {
     openapi: "3.1.0",
     info: {
       title: "Bamdad Alert API",
-      version: "1.0.3",
+      version: "1.0.4",
       description:
         "Self-hosted SSL/TLS certificate and domain expiry monitor. " +
         "All `/api/*` routes EXCEPT `/api/openapi.json`, `/api/docs`, " +

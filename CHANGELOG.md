@@ -1,3 +1,7 @@
+## 1.0.4
+
+Action-oriented dashboard, scoped alert coverage, sortable/paginated expiry records, multi-recipient SMTP/Resend, explicit email testing and partial SMTP delivery status. Updated documentation and screenshots.
+
 ## 1.0.3
 
 Unified expiry dashboard, safe account deletion, user password visibility, encrypted SMTP/Resend configuration, filtered delivery history, and updated bilingual documentation/screenshots.

@@ -15,8 +15,16 @@ import {
   domains,
   resources,
 } from "../db/schema.js";
-import { canAccessTarget } from "../middleware/permissions.js";
-import { readPolicy, sendConnection } from "../services/notifications.js";
+import {
+  domainScope,
+  resourceScope,
+  canAccessTarget,
+} from "../middleware/permissions.js";
+import {
+  resolvedPolicy,
+  readPolicy,
+  sendConnection,
+} from "../services/notifications.js";
 import { channelConfigSchema, validateChannelConfig } from "./channels.js";
 import { recordAudit } from "../services/audit.js";
 const policySchema = z
@@ -74,6 +82,52 @@ export function createNotificationsRouter(db: DB) {
       resourceType: "notification",
       resourceId: id,
     });
+  app.get("/coverage", (c) => {
+    const actor = c.get("actor")!;
+    const ready = new Set(
+      db
+        .select()
+        .from(connections)
+        .all()
+        .filter((r) => {
+          if (!r.enabled) return false;
+          const config = JSON.parse(r.config);
+          return (
+            r.channel !== "email" ||
+            config.emailProvider === "smtp" ||
+            !!config.resendApiKey ||
+            !!process.env.RESEND_API_KEY
+          );
+        })
+        .map((r) => r.id),
+    );
+    const keys = [
+      ...db
+        .select()
+        .from(domains)
+        .where(domainScope(db, actor, domains.id))
+        .all()
+        .map((r) => "domain:" + r.id),
+      ...db
+        .select()
+        .from(resources)
+        .where(resourceScope(db, actor, resources.id))
+        .all()
+        .map((r) => "resource:" + r.id),
+    ];
+    return c.json({
+      coverage: Object.fromEntries(
+        keys.map((key) => {
+          const policy = resolvedPolicy(db, key);
+          return [
+            key,
+            policy.mode !== "disabled" &&
+              policy.connectionIds.some((id) => ready.has(id)),
+          ];
+        }),
+      ),
+    });
+  });
   app.get("/connections", (c) =>
     c.json({
       connections: allowed(c.get("actor")!).map((r) =>
@@ -275,7 +329,8 @@ export function createNotificationsRouter(db: DB) {
     const status = c.req.query("status");
     if (
       !Number.isInteger(page) ||
-      (status && !["sent", "failed", "logged", "pending"].includes(status))
+      (status &&
+        !["sent", "partial", "failed", "logged", "pending"].includes(status))
     )
       return c.json({ error: "Invalid history filter" }, 400);
     const scope =

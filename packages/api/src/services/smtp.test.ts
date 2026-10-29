@@ -4,6 +4,7 @@ import { getChannelSender } from "./channels.js";
 describe("SMTP delivery", () => {
   it("delivers to an internal relay and refuses missing STARTTLS", async () => {
     const messages: string[] = [];
+    const recipients: string[] = [];
     const server = createServer((socket) => {
       socket.write("220 local test SMTP\r\n");
       let buffer = "",
@@ -23,7 +24,15 @@ describe("SMTP delivery", () => {
             } else message += line + "\n";
           } else if (line.startsWith("EHLO"))
             socket.write("250-local\r\n250 OK\r\n");
-          else if (line === "DATA") {
+          else if (line === "STARTTLS") socket.write("454 TLS unavailable\r\n");
+          else if (line.startsWith("RCPT TO:")) {
+            recipients.push(line);
+            socket.write(
+              line.includes("reject@example.com")
+                ? "550 Rejected\r\n"
+                : "250 OK\r\n",
+            );
+          } else if (line === "DATA") {
             data = true;
             socket.write("354 go\r\n");
           } else if (line === "QUIT") {
@@ -58,13 +67,27 @@ describe("SMTP delivery", () => {
       expect(result.error).toBeUndefined();
       expect(result.id).toBeTruthy();
       expect(messages[0]).toContain("Test body");
+      const multiple = await getChannelSender("email").send(
+        content,
+        { ...config, to: ["one@example.com", "two@example.com"] },
+        {},
+      );
+      expect(multiple.partial).toBe(false);
+      expect(recipients.some((x) => x.includes("one@example.com"))).toBe(true);
+      expect(recipients.some((x) => x.includes("two@example.com"))).toBe(true);
+      const partial = await getChannelSender("email").send(
+        content,
+        { ...config, to: ["one@example.com", "reject@example.com"] },
+        {},
+      );
+      expect(partial.partial).toBe(true);
       const secured = await getChannelSender("email").send(
         content,
         { ...config, smtpSecurity: "starttls" },
         {},
       );
       expect(secured.error).toBeTruthy();
-      expect(messages).toHaveLength(1);
+      expect(messages).toHaveLength(3);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

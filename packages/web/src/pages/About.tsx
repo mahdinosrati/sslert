@@ -40,7 +40,7 @@ export function About() {
           <Send className="h-5 w-5" aria-hidden="true" />
         </a>
       </div>
-      <p className="text-sm text-slate-500">{t("Bamdad Alert")} · 1.0.3</p>
+      <p className="text-sm text-slate-500">{t("Bamdad Alert")} · 1.0.4</p>
     </article>
   );
 }
