@@ -7,7 +7,10 @@ import { NotificationPolicy } from "./Notifications";
 import { formatDate } from "../lib/format";
 export interface Resource {
   id: number;
-  kind: "license" | "api";
+  kind: "license" | "api" | "domain" | "cert";
+  hostname: string;
+  serial: string;
+  validFrom: string | null;
   title: string;
   provider: string;
   owner: string;
@@ -15,6 +18,12 @@ export interface Resource {
   expiresAt: string | null;
   enabled: boolean;
 }
+const kindLabels = {
+  license: "Software license",
+  api: "API expiry",
+  domain: "Manual domain",
+  cert: "Private SSL certificate",
+};
 export function Resources() {
   const { t } = useI18n(),
     user = useAuth().data?.user,
@@ -29,6 +38,9 @@ export function Resources() {
     [busy, setBusy] = useState(false);
   const blank: Resource = {
     id: 0,
+    hostname: "",
+    serial: "",
+    validFrom: null,
     kind: "license",
     title: "",
     provider: "",
@@ -40,7 +52,7 @@ export function Resources() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{t("Licenses & API expiry")}</h1>
+        <h1 className="text-2xl font-semibold">{t("Manual expiry records")}</h1>
         {permits(user, "canCreate") && (
           <button className="primary" onClick={() => setEditing(blank)}>
             {t("Add item")}
@@ -49,7 +61,7 @@ export function Resources() {
       </div>
       <p className="text-slate-500">
         {t(
-          "Dates are entered manually. API tokens are not stored or validated.",
+          "Manual records do not perform network or certificate validation. Enter the dates from your records.",
         )}
       </p>
       {error && (
@@ -70,6 +82,9 @@ export function Resources() {
                 const {
                   id,
                   kind,
+                  hostname,
+                  serial,
+                  validFrom,
                   title,
                   provider,
                   owner,
@@ -79,6 +94,9 @@ export function Resources() {
                 } = editing;
                 const data = {
                   kind,
+                  hostname: hostname ?? "",
+                  serial: serial ?? "",
+                  validFrom: validFrom ?? null,
                   title,
                   provider,
                   owner,
@@ -113,14 +131,64 @@ export function Resources() {
               >
                 <option value="license">{t("Software license")}</option>
                 <option value="api">{t("API expiry")}</option>
+                <option value="domain">{t("Manual domain")}</option>
+                <option value="cert">{t("Private SSL certificate")}</option>
               </select>
             </label>
+            {["domain", "cert"].includes(editing.kind) && (
+              <label>
+                {t("Hostname")}
+                <input
+                  required
+                  dir="ltr"
+                  maxLength={253}
+                  value={editing.hostname}
+                  onChange={(e) =>
+                    setEditing({ ...editing, hostname: e.target.value })
+                  }
+                  placeholder="service.internal"
+                />
+              </label>
+            )}
+            {editing.kind === "cert" && (
+              <>
+                <label>
+                  {t("Valid from (Gregorian, UTC)")}
+                  <input
+                    type="date"
+                    value={editing.validFrom ?? ""}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        validFrom: e.target.value || null,
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  {t("Certificate serial")}
+                  <input
+                    dir="ltr"
+                    maxLength={256}
+                    value={editing.serial}
+                    onChange={(e) =>
+                      setEditing({ ...editing, serial: e.target.value })
+                    }
+                  />
+                </label>
+              </>
+            )}
             {(["title", "provider", "owner"] as const).map((f) => (
               <label key={f}>
                 {t(
                   {
                     title: "Title",
-                    provider: "Provider",
+                    provider:
+                      editing.kind === "cert"
+                        ? "Issuer / CA"
+                        : editing.kind === "domain"
+                          ? "Registrar"
+                          : "Provider",
                     owner: "Responsible person",
                   }[f],
                 )}
@@ -209,9 +277,24 @@ export function Resources() {
               <div className="flex justify-between gap-3">
                 <h2 className="break-words text-xl font-semibold">{r.title}</h2>
                 <span className="text-sm text-slate-500">
-                  {t(r.kind === "api" ? "API expiry" : "Software license")}
+                  {t(kindLabels[r.kind])}
                 </span>
               </div>
+              {r.hostname && (
+                <p className="break-all font-mono" dir="ltr">
+                  {r.hostname}
+                </p>
+              )}
+              {r.serial && (
+                <p className="text-sm">
+                  {t("Certificate serial")}: <bdi>{r.serial}</bdi>
+                </p>
+              )}
+              {r.validFrom && (
+                <p className="text-sm">
+                  {t("Valid From")}: {formatDate(r.validFrom + "T00:00:00Z")}
+                </p>
+              )}
               <p className="text-sm text-slate-500">
                 {r.provider}
                 {r.owner && ` · ${r.owner}`}

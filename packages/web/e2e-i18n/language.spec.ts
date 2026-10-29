@@ -343,7 +343,10 @@ test("documentation screenshots in light and dark themes", async ({
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: resolve(folder, "login.png"), fullPage: true });
   await page.getByLabel("ظاهر", { exact: true }).selectOption("dark");
-  await page.screenshot({path:resolve(folder,"login-dark.png"),fullPage:true});
+  await page.screenshot({
+    path: resolve(folder, "login-dark.png"),
+    fullPage: true,
+  });
   await login(page);
   await page.getByLabel("Language", { exact: true }).selectOption("fa");
   for (const theme of ["light", "dark"]) {
@@ -366,4 +369,70 @@ test("documentation screenshots in light and dark themes", async ({
       });
     }
   }
+});
+
+test("password visibility, favicon and contact icons", async ({ page }) => {
+  await page.goto("/login");
+  const password = page.getByLabel("Password", { exact: true });
+  await password.fill("example-password");
+  await expect(password).toHaveAttribute("type", "password");
+  await page
+    .getByRole("checkbox", { name: "Show password", exact: true })
+    .check();
+  await expect(password).toHaveAttribute("type", "text");
+  await page
+    .getByRole("checkbox", { name: "Show password", exact: true })
+    .uncheck();
+  await expect(password).toHaveValue("example-password");
+  await expect(password).toHaveAttribute("type", "password");
+  const favicon = await page.request.get("/favicon.svg?v=1.0.2");
+  expect(favicon.status()).toBe(200);
+  expect(favicon.headers()["content-type"]).toContain("image/svg+xml");
+  await login(page, true);
+  await page.goto("/about");
+  await expect(
+    page.getByRole("link", { name: "ایمیل توسعه‌دهنده", exact: true }),
+  ).toHaveAttribute("href", "mailto:mahdinosrati07@gmail.com");
+  await expect(
+    page.getByRole("link", { name: "تلگرام توسعه‌دهنده", exact: true }),
+  ).toHaveAttribute("href", "https://t.me/MiNosrati");
+  await expect(
+    page.getByText("mahdinosrati07@gmail.com", { exact: true }),
+  ).toHaveCount(0);
+});
+test("manual organizational SSL form submits certificate metadata", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/resources");
+  await page.getByRole("button", { name: "Add item", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Type", exact: true })
+    .selectOption("cert");
+  await page
+    .getByLabel("Hostname", { exact: true })
+    .fill("intranet.corp.local");
+  await page.getByLabel("Title", { exact: true }).fill("Organization SSL");
+  await page.getByLabel("Issuer / CA", { exact: true }).fill("Internal CA");
+  await page
+    .getByLabel("Valid from (Gregorian, UTC)", { exact: true })
+    .fill("2026-01-01");
+  await page.getByLabel("Certificate serial", { exact: true }).fill("01:AB");
+  await page
+    .getByLabel("Expiry date (Gregorian, UTC)", { exact: true })
+    .fill("2027-01-01");
+  const sent = page.waitForRequest(
+    (r) => r.method() === "POST" && r.url().endsWith("/resources"),
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  expect((await sent).postDataJSON()).toMatchObject({
+    kind: "cert",
+    hostname: "intranet.corp.local",
+    serial: "01:AB",
+    validFrom: "2026-01-01",
+    expiresAt: "2027-01-01",
+  });
+  await expect(
+    page.getByRole("heading", { name: "Organization SSL" }),
+  ).toBeVisible();
 });

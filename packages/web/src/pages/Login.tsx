@@ -11,6 +11,7 @@ export default function Login() {
   const navigate = useNavigate(),
     update = useSessionUpdate();
   const auth = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState(""),
     [password, setPassword] = useState(""),
     [error, setError] = useState(""),
@@ -29,11 +30,11 @@ export default function Login() {
           <LanguageSwitcher />
           <ThemeSwitcher />
         </div>
-        <ShieldCheck className="mt-6 h-9 w-9 text-sky-600" />
-        <h1 className="my-4 text-2xl font-semibold">
+        <ShieldCheck className="mx-auto mt-6 h-12 w-12 text-sky-600" />
+        <h1 className="my-4 text-center text-2xl font-semibold">
           {t("Sign in to Bamdad Alert")}
         </h1>
-        <p className="mb-6 text-sm text-slate-500">
+        <p className="mb-6 text-center text-sm text-slate-500">
           {t("Monitor expiry. Stay ahead.")}
         </p>
         <form
@@ -75,10 +76,18 @@ export default function Login() {
               autoComplete="current-password"
               dir="ltr"
               required
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+          </label>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={showPassword}
+              onChange={(e) => setShowPassword(e.target.checked)}
+            />
+            {t("Show password")}
           </label>
           {error && (
             <p role="alert" className="text-rose-600">

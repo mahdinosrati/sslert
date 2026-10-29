@@ -182,9 +182,9 @@ export async function sendConnection(
       : source;
     const subject = isTest
       ? fa
-        ? "[Bamdad Alert] پیام آزمایشی"
+        ? "[هشدار بامداد] پیام آزمایشی"
         : "[Bamdad Alert] TEST notification"
-      : `[Bamdad Alert] ${title} · ${label}`;
+      : `[${fa ? "هشدار بامداد" : "Bamdad Alert"}] ${title} · ${label}`;
     const text = isTest
       ? fa
         ? "این یک پیام آزمایشی است؛ نیازی به اقدام درباره انقضا نیست."
@@ -197,7 +197,9 @@ export async function sendConnection(
       text,
       hostname: title,
       daysRemaining: days,
-      source: (["cert","domain","license","api"].includes(source) ? source : "cert") as AlertContent["source"],
+      source: (["cert", "domain", "license", "api"].includes(source)
+        ? source
+        : "cert") as AlertContent["source"],
       level,
     };
     const result = await getChannelSender(
@@ -278,7 +280,9 @@ export async function checkResourceExpiry(db: DB) {
       db,
       `resource:${resource.id}`,
       resource.kind,
-      resource.title,
+      resource.hostname
+        ? `${resource.title} (${resource.hostname})`
+        : resource.title,
       days,
     );
   }

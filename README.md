@@ -1,8 +1,8 @@
-# Bamdad Alert 1.0.1
+# Bamdad Alert 1.0.2
 
 Self-hosted monitoring for SSL certificates, domain registrations, software licenses and API expiry dates. Built for the Bamdad Information Technology Group.
 
-[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.1.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
+[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.2.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
 
 English is the default. Persian includes RTL layout and bundled Vazir fonts. Choose light, dark or system appearance. The bilingual About page credits Mahdi Nosrati and links to [mahdinosrati07@gmail.com](mailto:mahdinosrati07@gmail.com).
 
@@ -11,7 +11,7 @@ English is the default. Persian includes RTL layout and bundled Vazir fonts. Cho
 Install Docker Engine and Compose v2 using the [official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/), then:
 
 ```bash
-git clone --branch v1.0.1 https://github.com/mahdinosrati/sslert.git
+git clone --branch v1.0.2 https://github.com/mahdinosrati/sslert.git
 cd sslert
 cp .env.example .env
 chmod 600 .env
@@ -22,6 +22,12 @@ sudo docker compose ps
 Open `http://SERVER_IP:5173`. Initial credentials are **admin / admin**. Changing the password to at least 12 characters is mandatory before accessing the panel. The initial account is created once and never reset on restart. Use HTTPS for public deployments and set `SESSION_COOKIE_SECURE=1` behind your HTTPS proxy. Keep it `0` for local HTTP.
 
 The repository slug, npm workspace names and `sslert-data` volume remain unchanged for upgrade compatibility. The application display name is **Bamdad Alert**.
+
+## Manual internal domains and organizational SSL
+
+Use **Manual expiry records → Add item** and select Manual domain or Private SSL certificate. Enter hostname, title, issuer/registrar and expiry. Certificates also support valid-from date and serial number. These records do not connect to the target or validate certificate chains; notifications use the entered dates. Existing account assignments and global/custom alert policies also apply. No certificate private key is stored.
+
+Login now has a Show password checkbox and centered branding. The browser tab uses the application shield logo; Persian branding is «هشدار بامداد». About offers accessible icon links for developer email and Telegram.
 
 ## Monitor items
 
@@ -69,7 +75,7 @@ Saving in the UI does not change the active port. The script checks availability
 
 ## Upgrade and rollback
 
-Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.1`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
+Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.2`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
 
 Migrations preserve old domains, checks and channels. Existing receiver configurations become per-domain custom policies; global email fallback is imported where applicable. Subsequent connection changes belong in the central Notifications UI. Legacy `/domains/:id/channels` configuration is retired after migration.
 

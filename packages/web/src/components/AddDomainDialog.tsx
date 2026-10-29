@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { useI18n, errorMessage } from "../lib/i18n";
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -20,7 +21,11 @@ interface AddDomainDialogProps {
   onAdded?: (id: number) => void;
 }
 
-export function AddDomainDialog({ open, onOpenChange, onAdded }: AddDomainDialogProps) {
+export function AddDomainDialog({
+  open,
+  onOpenChange,
+  onAdded,
+}: AddDomainDialogProps) {
   const { t } = useI18n();
   const [hostname, setHostname] = React.useState("");
   const [port, setPort] = React.useState("443");
@@ -51,10 +56,21 @@ export function AddDomainDialog({ open, onOpenChange, onAdded }: AddDomainDialog
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogHeader>
         <DialogTitle>{t("Add Domain")}</DialogTitle>
-        <DialogDescription>{t("Add a hostname to monitor. The first SSL check runs immediately.")}</DialogDescription>
+        <DialogDescription>
+          {t(
+            "Add a hostname to monitor. The first SSL check runs immediately.",
+          )}
+        </DialogDescription>
       </DialogHeader>
       <form onSubmit={onSubmit}>
         <DialogContent className="space-y-4">
+          <Link
+            className="block text-sm text-sky-700 underline"
+            to="/resources"
+            onClick={() => onOpenChange(false)}
+          >
+            {t("Private domain or organizational SSL? Add a manual record.")}
+          </Link>
           <div className="space-y-1.5">
             <Label htmlFor="hostname">{t("Hostname")}</Label>
             <Input
@@ -90,8 +106,13 @@ export function AddDomainDialog({ open, onOpenChange, onAdded }: AddDomainDialog
             type="button"
             variant="ghost"
             onClick={() => onOpenChange(false)}
-          >{t("Cancel")}</Button>
-          <Button type="submit" disabled={mutation.isPending || !hostname.trim()}>
+          >
+            {t("Cancel")}
+          </Button>
+          <Button
+            type="submit"
+            disabled={mutation.isPending || !hostname.trim()}
+          >
             {mutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (

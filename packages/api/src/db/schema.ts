@@ -172,8 +172,11 @@ export const loginAttempts = sqliteTable("login_attempts", {
 });
 
 export const resources = sqliteTable("resources", {
+  hostname: text("hostname").notNull().default(""),
+  serial: text("serial").notNull().default(""),
+  validFrom: text("valid_from"),
   id: integer("id").primaryKey({ autoIncrement: true }),
-  kind: text("kind").$type<"license" | "api">().notNull(),
+  kind: text("kind").$type<"license" | "api" | "domain" | "cert">().notNull(),
   title: text("title").notNull(),
   provider: text("provider").notNull().default(""),
   owner: text("owner").notNull().default(""),

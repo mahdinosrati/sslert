@@ -420,4 +420,57 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
     expect(p.mode).toBe("custom");
     expect(JSON.parse(p.connectionIds)).toHaveLength(1);
   });
+
+  it("accepts internal manual domains/certificates, validates dates and dispatches their expiry", async () => {
+    const cookie = await admin();
+    for (const kind of ["domain", "cert"]) {
+      const input = {
+        kind,
+        title: "Internal service",
+        hostname: "service.corp.local",
+        provider: "Organization CA",
+        validFrom: "2020-01-01",
+        expiresAt: "2021-01-01",
+        serial: "01:AB",
+      };
+      const result = await req("/resources", "POST", input, cookie);
+      expect(result.status).toBe(201);
+      expect((await result.json()).resource.hostname).toBe(input.hostname);
+      expect(
+        (await req("/resources", "POST", { ...input, hostname: "" }, cookie))
+          .status,
+      ).toBe(400);
+      expect(
+        (await req("/resources", "POST", { ...input, expiresAt: null }, cookie))
+          .status,
+      ).toBe(400);
+      expect(
+        (
+          await req(
+            "/resources",
+            "POST",
+            { ...input, validFrom: "2022-01-01" },
+            cookie,
+          )
+        ).status,
+      ).toBe(400);
+    }
+    const conn = store.db
+      .insert(connections)
+      .values({ name: "Alerts", channel: "email", config: '{"language":"fa"}' })
+      .returning()
+      .get()!;
+    store.db
+      .update(notificationPolicies)
+      .set({ connectionIds: JSON.stringify([conn.id]) })
+      .where(eq(notificationPolicies.key, "global"))
+      .run();
+    await checkResourceExpiry(store.db);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls.map((call) => call[0].source)).toEqual([
+      "domain",
+      "cert",
+    ]);
+    expect(send.mock.calls[0][0].text).toContain("service.corp.local");
+  });
 });

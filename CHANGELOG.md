@@ -1,3 +1,7 @@
+# 1.0.2 — Manual internal domains and organizational SSL
+
+Add manual domain/certificate expiry records with hostname, issuer, serial and validity dates; preserve existing records and assignments during migration. Add login password visibility, centered login branding, SVG favicon, Persian name «هشدار بامداد» and icon-only developer email/Telegram links.
+
 # 1.0.1 — Bamdad Alert
 
 Account login and granular access, central notifications and tests, software license/API expiry dates, Persian UI, dark mode and bilingual About page. See [release notes](docs/releases/1.0.1.md) and [upgrade guide](README.fa.md).

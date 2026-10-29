@@ -19,7 +19,15 @@ const date = z
   });
 const shape = z
   .object({
-    kind: z.enum(["license", "api"]),
+    kind: z.enum(["license", "api", "domain", "cert"]),
+    hostname: z
+      .string()
+      .trim()
+      .max(253)
+      .regex(/^[a-zA-Z0-9._-]*$/)
+      .default(""),
+    serial: z.string().trim().max(256).default(""),
+    validFrom: date.nullable().default(null),
     title: z.string().trim().min(1).max(200),
     provider: z.string().max(200).default(""),
     owner: z.string().max(200).default(""),
@@ -29,8 +37,11 @@ const shape = z
   })
   .strict()
   .refine(
-    (r) => r.kind !== "api" || r.expiresAt !== null,
-    "API expiry date is required",
+    (r) =>
+      (r.kind === "license" || r.expiresAt !== null) &&
+      (!["domain", "cert"].includes(r.kind) || !!r.hostname) &&
+      (!r.validFrom || !r.expiresAt || r.validFrom <= r.expiresAt),
+    "Expiry, hostname and date range must be valid",
   );
 export function createResourcesRouter(db: DB) {
   const app = new Hono<AuthEnv>();

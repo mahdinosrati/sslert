@@ -36,7 +36,7 @@ export default function App() {
   useEffect(() => {
     document.title =
       language === "fa"
-        ? "بامداد الرت | پایش اعتبار و هشدار"
+        ? "هشدار بامداد | پایش اعتبار و هشدار"
         : "Bamdad Alert | Expiry monitoring";
   }, [language]);
   useEffect(() => {
@@ -50,7 +50,7 @@ export default function App() {
   const login = location.pathname === "/login";
   const links = [
     ["/", "Dashboard"],
-    ["/resources", "Licenses & API expiry"],
+    ["/resources", "Manual expiry records"],
     ["/notifications", "Notifications"],
     ...(user?.role === "admin"
       ? [
@@ -71,7 +71,7 @@ export default function App() {
               className="flex items-center gap-2 text-xl font-semibold"
             >
               <ShieldCheck className="text-sky-600" />
-              <span>Bamdad Alert</span>
+              <span>{t("Bamdad Alert")}</span>
             </Link>
             <div className="flex flex-wrap items-center gap-2">
               <LanguageSwitcher />
@@ -190,7 +190,7 @@ export default function App() {
       </main>
       {!login && (
         <footer className="py-6 text-center text-xs text-slate-500">
-          Bamdad Alert · 1.0.1
+          {t("Bamdad Alert")} · 1.0.2
         </footer>
       )}
       {user && !user.mustChangePassword && permits(user, "canCreate") && (

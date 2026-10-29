@@ -216,7 +216,7 @@ export function Users() {
                   ))}
                 </fieldset>
                 <fieldset>
-                  <legend>{t("Assigned licenses & APIs")}</legend>
+                  <legend>{t("Assigned manual records")}</legend>
                   {resources.data?.resources.map((r) => (
                     <label className="check-label" key={r.id}>
                       <input
