@@ -4,7 +4,7 @@ Self-hosted monitoring for SSL certificates, domain registrations, software lice
 
 [راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.4.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
 
-English is the default. Persian includes RTL layout and bundled Vazir fonts. Choose light, dark or system appearance. The bilingual About page credits Mahdi Nosrati and links to [mahdinosrati07@gmail.com](mailto:mahdinosrati07@gmail.com).
+English is the default. Persian includes RTL layout and bundled Vazir fonts. Choose light, dark or system appearance.
 
 ## Quick start
 
