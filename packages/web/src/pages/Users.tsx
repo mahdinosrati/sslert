@@ -126,9 +126,7 @@ export function Users() {
                 const body = {
                   ...(!editing.id ? { username: editing.username } : {}),
                   ...(editing.password ? { password: editing.password } : {}),
-                  ...(editing.authSource === "ldap"
-                    ? {}
-                    : { role: editing.role }),
+                  role: editing.role,
                   canCreate: editing.canCreate,
                   canEdit: editing.canEdit,
                   canTest: editing.canTest,
@@ -170,7 +168,7 @@ export function Users() {
             {editing.authSource === "ldap" && (
               <p>
                 {t(
-                  "Directory roles and passwords are managed in LDAP",
+                  "Passwords are managed in LDAP; permissions are managed in this panel",
                 )}
               </p>
             )}
@@ -203,7 +201,6 @@ export function Users() {
             <label>
               {t("Role")}
               <select
-                disabled={editing.authSource === "ldap"}
                 value={editing.role}
                 onChange={(e) =>
                   setEditing({
@@ -232,7 +229,7 @@ export function Users() {
               <>
                 <p className="text-sm text-slate-500">
                   {t(
-                    "Users can view assigned items. Grant additional permissions below.",
+                    editing.authSource === "ldap" ? "LDAP users can view all records. Additional permissions apply to all records." : "Users can view assigned items. Grant additional permissions below.",
                   )}
                 </p>
                 {(["canCreate", "canEdit", "canTest"] as const).map((f) => (
@@ -247,13 +244,13 @@ export function Users() {
                     {t(
                       {
                         canCreate: "Create items",
-                        canEdit: "Edit assigned items",
+                        canEdit: editing.authSource === "ldap" ? "Edit all records" : "Edit assigned items",
                         canTest: "Send test notifications",
                       }[f],
                     )}
                   </label>
                 ))}
-                <fieldset>
+                <fieldset hidden={editing.authSource === "ldap"}>
                   <legend>{t("Assigned domains")}</legend>
                   {domains.data?.domains.map(({ domain: d }) => (
                     <label className="check-label" key={d.id}>

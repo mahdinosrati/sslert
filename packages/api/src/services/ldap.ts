@@ -186,7 +186,7 @@ export async function queryDirectory(
     return {
       guid: guid.toString("hex"),
       username: "ad:" + sam.toLowerCase(),
-      role: admin ? ("admin" as const) : ("user" as const),
+      role: "user" as const,
     };
   } finally {
     await client.unbind().catch(() => {});
@@ -216,12 +216,10 @@ export async function authenticateLdap(
     if (old && !old.enabled) throw Error("Account disabled");
     const update = {
       username: identity.username,
-      role: identity.role,
       ldapCheckedAt: new Date().toISOString(),
     };
     if (old) {
       if (old.authSource !== "ldap") throw Error("Identity conflict");
-      if (old.role !== identity.role) revokeUserAccess(tx, old.id);
       return tx
         .update(users)
         .set(update)
@@ -233,6 +231,7 @@ export async function authenticateLdap(
       .insert(users)
       .values({
         ...update,
+        role: "user",
         authSource: "ldap",
         ldapId: identity.guid,
         passwordHash: "!directory-account",
@@ -265,14 +264,6 @@ export async function refreshLdapUser(db: DB, user: typeof users.$inferSelect) {
       throw Error("Identity unavailable");
     const current = db.select().from(users).where(eq(users.id, user.id)).get();
     if (!current?.enabled) throw Error("Account disabled");
-    if (identity.role !== current.role) {
-      db.update(users)
-        .set({ role: identity.role, ldapCheckedAt: null })
-        .where(eq(users.id, user.id))
-        .run();
-      revokeUserAccess(db, user.id);
-      return null;
-    }
     return db
       .update(users)
       .set({ ldapCheckedAt: new Date().toISOString() })

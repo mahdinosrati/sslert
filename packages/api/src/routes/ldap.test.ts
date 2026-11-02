@@ -7,7 +7,7 @@ import { createInMemoryDb } from "../db/index.js";
 import { runSqlMigrations } from "../db/sqlmigrate.js";
 import { createApp } from "../index.js";
 import { ensureInitialAdmin } from "../services/users.js";
-import { users, appSettings, sessions } from "../db/schema.js";
+import { users, appSettings, sessions, resources, domains } from "../db/schema.js";
 import {
   ldapDefaults,
   saveLdap,
@@ -163,6 +163,28 @@ describe("LDAP integration", () => {
       403,
     );
   });
+  it("grants read access to current and future records, preserves panel grants, and expires sessions at eight hours", async () => {
+    const local=await localAdmin();
+    const first=await ldapLogin();const u=(await first.clone().json()).user;
+    let cookie=first.headers.get("set-cookie")!.split(";")[0];
+    expect(first.headers.get("set-cookie")).toContain("Max-Age=28800");
+    const session=store.db.select().from(sessions).all().find(x=>x.userId===u.id)!;
+    expect(Date.parse(session.expiresAt)-Date.now()).toBeLessThanOrEqual(8*3600_000);
+    expect(Date.parse(session.expiresAt)-Date.now()).toBeGreaterThan(8*3600_000-5000);
+    const record=store.db.insert(resources).values({kind:"license",title:"Unassigned record"}).returning().get();
+    const d=store.db.insert(domains).values({hostname:"example.com"}).returning().get();
+    expect((await (await req("/resources","GET",undefined,cookie)).json()).resources.some((x:any)=>x.id===record.id)).toBe(true);
+    expect((await req("/domains/"+d.id,"GET",undefined,cookie)).status).toBe(200);
+    expect((await req("/resources/"+record.id,"PATCH",{title:"Denied"},cookie)).status).toBe(403);
+    expect((await req("/users/"+u.id,"PATCH",{role:"admin"},cookie)).status).toBe(403);
+    expect((await req("/users/"+u.id,"PATCH",{canEdit:true},local)).status).toBe(200);
+    cookie=(await ldapLogin()).headers.get("set-cookie")!.split(";")[0];
+    store.db.update(users).set({ldapCheckedAt:"2000-01-01T00:00:00Z"}).where(eq(users.id,u.id)).run();
+    expect((await (await req("/auth/me","GET",undefined,cookie)).json()).user.canEdit).toBe(true);
+    expect((await req("/resources/"+record.id,"PUT",{kind:"license",expiresAt:null,title:"Allowed"},cookie)).status).toBe(200);
+    store.db.update(sessions).set({expiresAt:"2000-01-01T00:00:00Z"}).where(eq(sessions.userId,u.id)).run();
+    expect((await req("/auth/me","GET",undefined,cookie)).status).toBe(401);
+  });
   it("fails closed on wrong password, empty password, disabled or expired accounts, disallowed groups and duplicate results", async () => {
     expect((await ldapLogin("wrong")).status).toBe(401);
     expect((await ldapLogin("")).status).toBe(401);
@@ -184,12 +206,12 @@ describe("LDAP integration", () => {
     expect(mocks.bind).not.toHaveBeenCalledWith(entry.dn,"alice-password");
     adminGroup=true;
     const identity=await queryDirectory(settings,{username:"alice",password:"alice-password"});
-    expect(identity?.role).toBe("admin");
+    expect(identity?.role).toBe("user");
     expect(mocks.construct).toHaveBeenLastCalledWith(expect.objectContaining({url:"ldap://dc.internal:389"}));
     expect(mocks.construct.mock.calls.at(-1)![0]).not.toHaveProperty("tlsOptions");
     expect(mocks.startTLS).not.toHaveBeenCalled();
     saveLdap(store.db,settings);
-    expect((await (await ldapLogin()).json()).user.role).toBe("admin");
+    expect((await (await ldapLogin()).json()).user.role).toBe("user");
     adminGroup=false;
     expect((await ldapLogin()).status).toBe(401);
   });
@@ -210,8 +232,12 @@ describe("LDAP integration", () => {
   it("maps only the explicit administrator group and preserves the last local administrator", async () => {
     adminGroup = true;
     const result = await ldapLogin();
-    expect((await result.clone().json()).user.role).toBe("admin");
-    const cookie = result.headers.get("set-cookie")!.split(";")[0];
+    expect((await result.clone().json()).user.role).toBe("user");
+    const local = await localAdmin();
+    const uid = (await result.clone().json()).user.id;
+    expect((await req("/users/"+uid,"PATCH",{role:"admin"},local)).status).toBe(200);
+    const promoted=await ldapLogin();
+    const cookie = promoted.headers.get("set-cookie")!.split(";")[0];
     expect((await req("/users/1", "DELETE", undefined, cookie)).status).toBe(
       409,
     );

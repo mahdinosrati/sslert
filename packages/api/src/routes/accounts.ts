@@ -47,7 +47,7 @@ const cookieOptions = () => ({
   sameSite: "Strict" as const,
   secure: process.env.SESSION_COOKIE_SECURE === "1",
   path: "/",
-  maxAge: 12 * 3600,
+  maxAge: 8 * 3600,
 });
 function issueSession(c: Context, db: DB, userId: number) {
   const raw = generateToken();
@@ -58,7 +58,7 @@ function issueSession(c: Context, db: DB, userId: number) {
     .values({
       userId,
       tokenHash: hashToken(raw),
-      expiresAt: new Date(Date.now() + 12 * 3600_000).toISOString(),
+      expiresAt: new Date(Date.now() + 8 * 3600_000).toISOString(),
     })
     .run();
   setCookie(c, SESSION_COOKIE, raw, cookieOptions());
@@ -404,13 +404,12 @@ export function createAccountRouter(db: DB) {
     const user = db.select().from(users).where(eq(users.id, id)).get();
     if (
       user?.authSource === "ldap" &&
-      (input.password !== undefined ||
-        (input.role !== undefined && input.role !== user.role))
+      input.password !== undefined
     )
       return c.json(
         {
           error:
-            "Directory roles and passwords are managed in LDAP",
+            "Passwords are managed in LDAP; permissions are managed in this panel",
         },
         400,
       );

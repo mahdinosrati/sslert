@@ -409,5 +409,13 @@
   "One directory group, administrator access only": "یک گروه دایرکتوری، فقط دسترسی مدیر",
   "Only members of the administrator group can sign in. Every member receives full panel administrator access.": "فقط اعضای گروه مدیران می‌توانند وارد شوند. تمام اعضا دسترسی کامل مدیریت پنل دارند.",
   "LDAP without encryption": "LDAP بدون رمزنگاری",
-  "Unencrypted LDAP sends search-account and user passwords without transport encryption. Use only on an explicitly trusted network.": "LDAP بدون رمزنگاری، رمز حساب اتصال و کاربران را بدون حفاظت در مسیر شبکه ارسال می‌کند. فقط در شبکه مورد اعتماد و با انتخاب آگاهانه استفاده کنید."
+  "Unencrypted LDAP sends search-account and user passwords without transport encryption. Use only on an explicitly trusted network.": "LDAP بدون رمزنگاری، رمز حساب اتصال و کاربران را بدون حفاظت در مسیر شبکه ارسال می‌کند. فقط در شبکه مورد اعتماد و با انتخاب آگاهانه استفاده کنید.",
+  "Passwords are managed in LDAP; permissions are managed in this panel": "رمز در LDAP و نقش و مجوزها در همین پنل مدیریت می‌شوند.",
+  "LDAP users can view all records. Additional permissions apply to all records.": "کاربران LDAP همه رکوردها را مشاهده می‌کنند. مجوزهای بیشتر روی همه رکوردها اعمال می‌شوند.",
+  "Edit all records": "ویرایش همه رکوردها",
+  "Use one allowed LDAP group": "استفاده از یک گروه مجاز LDAP",
+  "Allowed LDAP group DN": "DN گروه مجاز LDAP",
+  "Group membership permits login only. New LDAP users can view all records; administrators grant additional permissions in this panel.": "عضویت گروه فقط اجازه ورود می‌دهد. کاربران جدید LDAP همه رکوردها را مشاهده می‌کنند؛ مدیر مجوزهای بیشتر را از همین پنل می‌دهد.",
+  "LDAP verifies identity and group membership. Roles and permissions are managed in this panel. Keep a local administrator for recovery.": "LDAP هویت و عضویت گروه را بررسی می‌کند. نقش و مجوزها در پنل مدیریت می‌شوند. یک مدیر محلی برای بازیابی دسترسی نگه دارید.",
+  "Use a dedicated LDAP group. Nested membership is supported; primary-group-only membership is not. Group membership never grants administrator access automatically.": "از گروه اختصاصی LDAP استفاده کنید. عضویت تودرتو پشتیبانی می‌شود؛ عضویت صرفاً از طریق گروه اصلی کافی نیست. عضویت گروه به‌صورت خودکار دسترسی مدیر نمی‌دهد."
 }

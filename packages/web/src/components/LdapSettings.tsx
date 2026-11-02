@@ -71,7 +71,7 @@ export function LdapSettings() {
       <h2 className="text-xl font-semibold">LDAP</h2>
       <p className="text-sm text-slate-500">
         {t(
-          "Directory login is optional. Keep a local administrator for recovery. Group membership controls directory roles; item permissions remain in the panel.",
+          "LDAP verifies identity and group membership. Roles and permissions are managed in this panel. Keep a local administrator for recovery.",
         )}
       </p>
       {query.error && <p role="alert">{errorMessage(query.error)}</p>}
@@ -93,15 +93,15 @@ export function LdapSettings() {
             />
             {t("Enable LDAP login")}
           </label>
-          <label className="check-label"><input type="checkbox" checked={!!settings.adminOnly} onChange={(e) => setSettings({...settings, adminOnly:e.target.checked})} />{t("One directory group, administrator access only")}</label>
-          {settings.adminOnly && <p>{t("Only members of the administrator group can sign in. Every member receives full panel administrator access.")}</p>}
+          <label className="check-label"><input type="checkbox" checked={!!settings.adminOnly} onChange={(e) => setSettings({...settings, adminOnly:e.target.checked})} />{t("Use one allowed LDAP group")}</label>
+          {settings.adminOnly && <p>{t("Group membership permits login only. New LDAP users can view all records; administrators grant additional permissions in this panel.")}</p>}
           {(
             [
               ["host", "Directory server"],
               ["baseDn", "Base DN"],
               ["bindDn", "Search account DN / UPN"],
               ["userGroup", "Allowed user group DN"],
-              ["adminGroup", "Administrator group DN"],
+              ["adminGroup", "Allowed LDAP group DN"],
             ] as const
           ).filter(([key]) => !settings.adminOnly || key !== "userGroup").map(([key, label]) => (
             <label key={key}>
@@ -187,7 +187,7 @@ export function LdapSettings() {
           </label>
           <p className="text-sm text-slate-500">
             {t(
-              "Use dedicated AD groups. Nested membership is supported; primary-group-only membership is not. Leave the administrator group empty to grant no directory administrator access.",
+              "Use a dedicated LDAP group. Nested membership is supported; primary-group-only membership is not. Group membership never grants administrator access automatically.",
             )}
           </p>
           <label>

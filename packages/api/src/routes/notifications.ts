@@ -334,7 +334,7 @@ export function createNotificationsRouter(db: DB) {
     )
       return c.json({ error: "Invalid history filter" }, 400);
     const scope =
-      a.role === "admin"
+      (a.role === "admin" || a.authSource === "ldap")
         ? undefined
         : or(
             sql`${deliveries.targetKey} IN (SELECT 'domain:' || domain_id FROM user_domains WHERE user_id = ${a.userId})`,

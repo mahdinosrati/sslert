@@ -14,6 +14,7 @@ export interface RequestActor {
   role: "admin" | "user";
   kind: "user" | "api_token" | "system";
   mustChangePassword: boolean;
+  authSource?: "local" | "ldap";
   canCreate?: boolean;
   canEdit?: boolean;
   canTest?: boolean;
@@ -84,6 +85,7 @@ export function createAuthMiddleware(db: DB): MiddlewareHandler<AuthEnv> {
       userId: user.id,
       label: user.username,
       role: user.role,
+      authSource: user.authSource,
       canCreate: user.canCreate,
       canEdit: user.canEdit,
       canTest: user.canTest,

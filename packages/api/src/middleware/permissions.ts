@@ -8,7 +8,7 @@ export function domainScope(
   actor: RequestActor | undefined,
   column: AnyColumn,
 ) {
-  if (!actor || actor.role === "admin") return undefined;
+  if (!actor || (actor.role === "admin" || actor.authSource === "ldap")) return undefined;
   return inArray(
     column,
     db
@@ -22,7 +22,7 @@ export function resourceScope(
   actor: RequestActor | undefined,
   column: AnyColumn,
 ) {
-  if (!actor || actor.role === "admin") return undefined;
+  if (!actor || (actor.role === "admin" || actor.authSource === "ldap")) return undefined;
   return inArray(
     column,
     db
@@ -39,6 +39,7 @@ export function canAccessDomain(
   return (
     !actor ||
     actor.role === "admin" ||
+    actor.authSource === "ldap" ||
     !!db
       .select()
       .from(userDomains)
@@ -56,6 +57,7 @@ export function canAccessResource(
   return (
     !actor ||
     actor.role === "admin" ||
+    actor.authSource === "ldap" ||
     !!db
       .select()
       .from(userResources)
