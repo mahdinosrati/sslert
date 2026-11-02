@@ -105,7 +105,7 @@ export async function queryDirectory(
   identity?: { username?: string; guid?: string; password?: string },
 ) {
   if (!completeLdap(settings))
-    throw Error("Incomplete Active Directory settings");
+    throw Error("Incomplete LDAP settings");
   const tls = {
     minVersion: "TLSv1.2" as const,
     rejectUnauthorized: true,

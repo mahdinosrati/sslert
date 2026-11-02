@@ -75,7 +75,7 @@ export default function Login() {
                 onChange={(e) => setProvider(e.target.value)}
               >
                 <option value="local">{t("Local account")}</option>
-                <option value="ldap">Microsoft Active Directory</option>
+                <option value="ldap">LDAP</option>
               </select>
             </label>
           )}

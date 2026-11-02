@@ -68,7 +68,7 @@ export function LdapSettings() {
   }
   return (
     <section className="panel space-y-4">
-      <h2 className="text-xl font-semibold">Microsoft Active Directory</h2>
+      <h2 className="text-xl font-semibold">LDAP</h2>
       <p className="text-sm text-slate-500">
         {t(
           "Directory login is optional. Keep a local administrator for recovery. Group membership controls directory roles; item permissions remain in the panel.",
@@ -91,7 +91,7 @@ export function LdapSettings() {
                 setSettings({ ...settings, enabled: e.target.checked })
               }
             />
-            {t("Enable Active Directory login")}
+            {t("Enable LDAP login")}
           </label>
           <label className="check-label"><input type="checkbox" checked={!!settings.adminOnly} onChange={(e) => setSettings({...settings, adminOnly:e.target.checked})} />{t("One directory group, administrator access only")}</label>
           {settings.adminOnly && <p>{t("Only members of the administrator group can sign in. Every member receives full panel administrator access.")}</p>}

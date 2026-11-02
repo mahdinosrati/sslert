@@ -51,7 +51,7 @@ const entry = {
   userAccountControl: "512",
   accountExpires: "0",
 };
-describe("Active Directory integration", () => {
+describe("LDAP integration", () => {
   let store: ReturnType<typeof createInMemoryDb>,
     app: ReturnType<typeof createApp>,
     folder: string,

@@ -27,7 +27,7 @@ export function createSettingsRouter(db: DB) {
       const raw = await c.req.json().catch(() => null);
       const parsed = ldapSchema.safeParse(raw?.settings);
       if (!parsed.success)
-        return c.json({ error: "Invalid Active Directory settings" }, 400);
+        return c.json({ error: "Invalid LDAP settings" }, 400);
       try {
         const settings = mergeLdap(db, parsed.data);
         if ((settings.enabled || method === "test") && !completeLdap(settings))

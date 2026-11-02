@@ -234,7 +234,7 @@ export function createAccountRouter(db: DB) {
       .where(eq(users.id, c.get("actor")!.userId))
       .get();
     if (user?.authSource === "ldap")
-      return c.json({ error: "Manage this password in Active Directory" }, 400);
+      return c.json({ error: "Manage this password in LDAP" }, 400);
     if (
       !user ||
       !(await verifyPassword(input.data.currentPassword, user.passwordHash))
@@ -410,7 +410,7 @@ export function createAccountRouter(db: DB) {
       return c.json(
         {
           error:
-            "Directory roles and passwords are managed in Active Directory",
+            "Directory roles and passwords are managed in LDAP",
         },
         400,
       );

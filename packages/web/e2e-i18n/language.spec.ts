@@ -726,7 +726,7 @@ test("Jalali calendar picks dates and blocks invalid Esfand days", async ({
     page.getByLabel("Expiry date (Gregorian, UTC)", { exact: true }),
   ).toHaveValue("2026-11-01");
 });
-test("Active Directory login selector and administration form", async ({
+test("LDAP login selector and administration form", async ({
   page,
 }) => {
   await page.goto("/login");

@@ -170,7 +170,7 @@ export function Users() {
             {editing.authSource === "ldap" && (
               <p>
                 {t(
-                  "Directory roles and passwords are managed in Active Directory",
+                  "Directory roles and passwords are managed in LDAP",
                 )}
               </p>
             )}

@@ -139,7 +139,7 @@ Email connections accept 1–50 recipients as an address array or comma/semicolo
 
 New endpoint: `GET /api/notifications/coverage` returns scoped target-key → boolean coverage without connection secrets. `GET /api/notifications/history?status=partial` filters partial deliveries.
 
-## 1.0.5: Jalali dates, contracts and Microsoft Active Directory
+## 1.0.5: Jalali dates, contracts and LDAP
 
 Manual records support contracts with number, counterparty, owner, start/end dates and notes. They participate in dashboard filters, permissions and notification policies. Persian forms accept Jalali dates and Persian/Arabic/ASCII digits with leap-year validation; English forms remain Gregorian. API/storage use ISO Gregorian dates.
 
