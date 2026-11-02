@@ -54,6 +54,7 @@ export function errorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (language === "en") return message;
   const status = (error as { status?: number } | null)?.status;
+  if (message === "Invalid username or password") return t(message);
   if (status === 401) return t("Unauthorized — check your API token");
   if (status === 429) return t("Too many requests. Please try again shortly.");
   if (status && status >= 500) return t("Server unavailable. Check the API logs.");

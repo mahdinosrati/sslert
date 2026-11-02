@@ -720,4 +720,14 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
       ).status,
     ).toBe(400);
   });
+
+ it("creates contracts, validates date ranges and dispatches contract alerts",async()=>{
+  const cookie=await admin();const body={kind:"contract",title:"Support contract",contractNumber:"CT-2026",provider:"Example partner",owner:"IT",validFrom:"2026-01-01",expiresAt:"2026-11-01"};
+  const response=await req("/resources","POST",body,cookie);expect(response.status).toBe(201);const record=(await response.json()).resource;expect(record).toMatchObject(body);
+  expect((await req("/resources","POST",{...body,validFrom:"2027-01-01"},cookie)).status).toBe(400);
+  expect((await req("/resources","POST",{...body,expiresAt:null},cookie)).status).toBe(400);
+  const conn=store.db.insert(connections).values({name:"Contract mail",channel:"email",config:JSON.stringify({to:"ops@example.com",language:"fa"})}).returning().get()!;
+  store.db.update(notificationPolicies).set({connectionIds:JSON.stringify([conn.id])}).where(eq(notificationPolicies.key,"global")).run();await dispatchExpiry(store.db,"resource:"+record.id,"contract",body.title,7);
+  expect(send.mock.calls.at(-1)?.[0]).toMatchObject({source:"contract"});expect(send.mock.calls.at(-1)?.[0].subject).toContain("قرارداد");
+ });
 });

@@ -1,8 +1,8 @@
-# Bamdad Alert 1.0.4
+# Bamdad Alert 1.0.5
 
 Self-hosted monitoring for SSL certificates, domain registrations, software licenses and API expiry dates. Built for the Bamdad Information Technology Group.
 
-[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.4.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
+[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.5.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
 
 English is the default. Persian includes RTL layout and bundled Vazir fonts. Choose light, dark or system appearance.
 
@@ -11,7 +11,7 @@ English is the default. Persian includes RTL layout and bundled Vazir fonts. Cho
 Install Docker Engine and Compose v2 using the [official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/), then:
 
 ```bash
-git clone --branch v1.0.4 https://github.com/mahdinosrati/sslert.git
+git clone --branch v1.0.5 https://github.com/mahdinosrati/sslert.git
 cd sslert
 cp .env.example .env
 chmod 600 .env
@@ -75,7 +75,7 @@ Saving in the UI does not change the active port. The script checks availability
 
 ## Upgrade and rollback
 
-Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.4`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
+Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.5`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
 
 Migrations preserve old domains, checks and channels. Existing receiver configurations become per-domain custom policies; global email fallback is imported where applicable. Subsequent connection changes belong in the central Notifications UI. Legacy `/domains/:id/channels` configuration is retired after migration.
 
@@ -129,7 +129,7 @@ Resend remains available, with a per-connection API key or the server `RESEND_AP
 
 History includes target/connection names, channel, time and result, with status filtering and 50-row pagination. Accepted means the delivery service accepted the message, not guaranteed inbox delivery. Users see history only for assigned targets.
 
-## 1.0.4: action-oriented dashboard and multiple email recipients
+## 1.0.5: action-oriented dashboard and multiple email recipients
 
 The dashboard separates unique host counts from expiry records, shows non-overlapping 1–7 and 8–30 day cards, highlights actionable records, and offers clickable 1–7/8–30/31–60/61–90 day bars. Disabled items are excluded from future-expiry bins. The table supports search, type/status filters, sortable columns and 15-row pages, with direct resource edit/policy links. Latest checks and delivery activity retain user access restrictions.
 
@@ -138,3 +138,19 @@ Alert coverage reflects the effective global/custom policy and enabled connectio
 Email connections accept 1–50 recipients as an address array or comma/semicolon/newline-separated text. Invalid addresses are rejected and duplicates removed. Existing single-address connections remain compatible. Save the connection, then select **Send test email** to test all saved recipients (30-second cooldown). SMTP partial rejection is recorded as `partial`, not success. Recipients are included in To and can see the other addresses. Delivery-service acceptance does not guarantee inbox placement.
 
 New endpoint: `GET /api/notifications/coverage` returns scoped target-key → boolean coverage without connection secrets. `GET /api/notifications/history?status=partial` filters partial deliveries.
+
+## 1.0.5: Jalali dates, contracts and Microsoft Active Directory
+
+Manual records support contracts with number, counterparty, owner, start/end dates and notes. They participate in dashboard filters, permissions and notification policies. Persian forms accept Jalali dates and Persian/Arabic/ASCII digits with leap-year validation; English forms remain Gregorian. API/storage use ISO Gregorian dates.
+
+Administrators can configure AD under Settings: DNS hostname, Base DN, read-only bind account/password, sAMAccountName or userPrincipalName, and explicit user/admin group DNs. Use LDAPS (636) or STARTTLS (389), with a trusted certificate and optional organization CA in PEM format. Nested group membership is supported; primary-group-only membership is not. Admin membership takes precedence. Test connection and optionally user lookup before enabling. Test lookup does not verify the user's password.
+
+LDAP is disabled by default. Local login and the last enabled local administrator are retained for recovery. AD accounts are provisioned after successful login with an ad: prefix; ordinary users initially have no record grants or write/test permissions. Roles follow AD groups; item permissions remain managed in the panel. User passwords are never stored; the bind password is encrypted with notification.key. Back up that key alongside the database and .env.
+
+Directory authorization is rechecked on requests after a five-minute cache; group loss, role changes or failed revalidation revoke sessions. Saving directory configuration revokes all AD sessions. Panel-disabled accounts cannot log back in. Deploy HTTPS at the panel before using organizational credentials; LDAP TLS protects only the server-to-directory connection. Actual organization connectivity must be tested with your own AD settings.
+
+See the [Persian setup guide and screenshots](README.fa.md) for light/dark settings and the Jalali contract form.
+
+## Contributors
+
+Bamdad Alert development: **[Mahdi Nosrati / MahdiNosrati](https://github.com/mahdinosrati)**, Bamdad Information Technology Group. Built on SSLert; original contributors' attribution and AGPL-3.0 licensing are preserved. GitHub's automatic Contributors list is derived from attributed commits.

@@ -1,3 +1,4 @@
+import { authenticateLdap, readLdap } from "../services/ldap.js";
 import { Hono, type Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { and, eq, lt, sql } from "drizzle-orm";
@@ -81,18 +82,30 @@ function audit(
 
 export function createLoginRouter(db: DB) {
   const app = new Hono();
+  app.get("/providers", (c) => c.json({ ldap: readLdap(db).enabled }));
   app.post("/login", async (c) => {
     if (c.req.header("X-SSLert-Request") !== "1")
       return c.json({ error: "Invalid request origin" }, 403);
     const parsed = z
       .object({
-        username: usernameSchema,
+        username: z
+          .string()
+          .trim()
+          .min(1)
+          .max(128)
+          .regex(/^[a-zA-Z0-9_.@-]+$/)
+          .transform((s) => s.toLowerCase()),
+        provider: z.enum(["local", "ldap"]).default("local"),
         password: z.string().min(1).max(256),
       })
       .safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
       return c.json({ error: "Invalid username or password" }, 401);
-    const key = hashToken(parsed.data.username);
+    const key = hashToken(
+      parsed.data.provider === "local"
+        ? parsed.data.username
+        : "ldap:" + parsed.data.username,
+    );
     const now = new Date().toISOString();
     db.delete(loginAttempts).where(lt(loginAttempts.expiresAt, now)).run();
     const prior = db
@@ -117,14 +130,34 @@ export function createLoginRouter(db: DB) {
         set: { count: sql`${loginAttempts.count} + 1` },
       })
       .run();
-    const user = db
-      .select()
-      .from(users)
-      .where(eq(users.username, parsed.data.username))
-      .get();
-    const valid = user
-      ? await verifyPassword(parsed.data.password, user.passwordHash)
-      : (await hashPassword(parsed.data.password), false);
+    let user: typeof users.$inferSelect | undefined;
+    let valid = false;
+    if (parsed.data.provider === "ldap") {
+      try {
+        user = await authenticateLdap(
+          db,
+          parsed.data.username,
+          parsed.data.password,
+        );
+        valid = true;
+      } catch {
+        valid = false;
+      }
+    } else {
+      user = db
+        .select()
+        .from(users)
+        .where(
+          and(
+            eq(users.username, parsed.data.username),
+            eq(users.authSource, "local"),
+          ),
+        )
+        .get();
+      valid = user
+        ? await verifyPassword(parsed.data.password, user.passwordHash)
+        : (await hashPassword(parsed.data.password), false);
+    }
     if (!user?.enabled || !valid) {
       recordAudit(db, {
         actorType: "user",
@@ -200,6 +233,8 @@ export function createAccountRouter(db: DB) {
       .from(users)
       .where(eq(users.id, c.get("actor")!.userId))
       .get();
+    if (user?.authSource === "ldap")
+      return c.json({ error: "Manage this password in Active Directory" }, 400);
     if (
       !user ||
       !(await verifyPassword(input.data.currentPassword, user.passwordHash))
@@ -322,11 +357,18 @@ export function createAccountRouter(db: DB) {
       if (!user) return "missing";
       if (
         user.role === "admin" &&
+        user.authSource === "local" &&
         user.enabled &&
         tx
           .select()
           .from(users)
-          .where(and(eq(users.role, "admin"), eq(users.enabled, true)))
+          .where(
+            and(
+              eq(users.role, "admin"),
+              eq(users.enabled, true),
+              eq(users.authSource, "local"),
+            ),
+          )
           .all().length <= 1
       )
         return "last";
@@ -360,6 +402,18 @@ export function createAccountRouter(db: DB) {
       );
     const input = parsed.data;
     const user = db.select().from(users).where(eq(users.id, id)).get();
+    if (
+      user?.authSource === "ldap" &&
+      (input.password !== undefined ||
+        (input.role !== undefined && input.role !== user.role))
+    )
+      return c.json(
+        {
+          error:
+            "Directory roles and passwords are managed in Active Directory",
+        },
+        400,
+      );
     if (!user) return c.json({ error: "Not found" }, 404);
     if (
       input.domainIds?.some(
@@ -381,13 +435,20 @@ export function createAccountRouter(db: DB) {
       const current = tx.select().from(users).where(eq(users.id, id)).get()!;
       if (
         current.role === "admin" &&
+        current.authSource === "local" &&
         current.enabled &&
         (input.enabled === false || (input.role && input.role !== "admin"))
       ) {
         const admins = tx
           .select()
           .from(users)
-          .where(and(eq(users.role, "admin"), eq(users.enabled, true)))
+          .where(
+            and(
+              eq(users.role, "admin"),
+              eq(users.enabled, true),
+              eq(users.authSource, "local"),
+            ),
+          )
           .all();
         if (admins.length <= 1) return null;
       }

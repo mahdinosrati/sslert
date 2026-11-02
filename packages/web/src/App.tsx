@@ -110,9 +110,11 @@ export default function App() {
                   {t("+ Add domain")}
                 </button>
               )}
-              <Link className="ms-auto text-sm text-slate-500" to="/password">
-                {t("Change password")}
-              </Link>
+              {user.authSource !== "ldap" && (
+                <Link className="ms-auto text-sm text-slate-500" to="/password">
+                  {t("Change password")}
+                </Link>
+              )}
             </nav>
           )}
         </header>
@@ -190,7 +192,7 @@ export default function App() {
       </main>
       {!login && (
         <footer className="py-6 text-center text-xs text-slate-500">
-          {t("Bamdad Alert")} · 1.0.4
+          {t("Bamdad Alert")} · 1.0.5
         </footer>
       )}
       {user && !user.mustChangePassword && permits(user, "canCreate") && (

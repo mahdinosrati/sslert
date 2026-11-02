@@ -7,6 +7,7 @@ export const types = [
   "API expiry",
   "Manual domain",
   "Private SSL certificate",
+  "Contract",
 ];
 export const states = [
   "Healthy",
@@ -104,6 +105,7 @@ export function buildOverview(
           api: types[3],
           domain: types[4],
           cert: types[5],
+        contract: types[6],
         }[r.kind],
         expiry: r.expiresAt,
         days: remaining(

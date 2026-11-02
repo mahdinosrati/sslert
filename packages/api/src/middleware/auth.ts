@@ -1,3 +1,4 @@
+import { refreshLdapUser } from "../services/ldap.js";
 import type { MiddlewareHandler } from "hono";
 import { getCookie } from "hono/cookie";
 import { eq } from "drizzle-orm";
@@ -74,7 +75,8 @@ export function createAuthMiddleware(db: DB): MiddlewareHandler<AuthEnv> {
       )
         return c.json({ error: "Invalid request origin" }, 403);
     }
-    const user = db.select().from(users).where(eq(users.id, userId)).get();
+    let user = db.select().from(users).where(eq(users.id, userId)).get();
+    if(user?.enabled && user.authSource === "ldap") user = await refreshLdapUser(db,user) ?? undefined;
     if (!user?.enabled)
       return c.json({ error: "Account disabled or unavailable" }, 401);
     c.set("actor", {

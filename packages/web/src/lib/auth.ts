@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { request } from "./api";
 export interface User {
   id: number;
+  authSource?: "local" | "ldap";
   username: string;
   role: "admin" | "user";
   enabled: boolean;

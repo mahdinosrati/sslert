@@ -106,7 +106,28 @@ test.beforeEach(async ({ page }) => {
     const method = route.request().method();
     let body: any = {};
     let status = 200;
-    if (path === "/api/auth/login") {
+    if (path === "/api/auth/providers") body = { ldap: true };
+    else if (path === "/api/settings/ldap")
+      body = {
+        settings: {
+          enabled: false,
+          host: "",
+          port: 636,
+          security: "ldaps",
+          baseDn: "",
+          bindDn: "",
+          userAttribute: "sAMAccountName",
+          userGroup: "",
+          adminGroup: "",
+          caPem: "",
+          bindPasswordSet: true,
+        },
+      };
+    else if (path === "/api/settings/ldap/test")
+      body = { ok: true, role: "user" };
+    else if (path === "/api/settings/ldap/save")
+      body = { settings: route.request().postDataJSON().settings };
+    else if (path === "/api/auth/login") {
       signed = true;
       body = { user };
     } else if (path === "/api/auth/me") {
@@ -392,6 +413,7 @@ test("documentation screenshots in light and dark themes", async ({
       ["/resources", "resources"],
       ["/notifications", "notifications"],
       ["/users", "users"],
+      ["/settings", "settings"],
       ["/about", "about"],
       ["/audit", "audit"],
     ]) {
@@ -403,6 +425,15 @@ test("documentation screenshots in light and dark themes", async ({
         fullPage: true,
       });
     }
+    await page.goto("/resources");
+    await page.getByRole("button", { name: "افزودن مورد", exact: true }).click();
+    await page.getByRole("combobox", { name: "نوع", exact: true }).selectOption("contract");
+    await page.getByLabel("عنوان", { exact: true }).fill("قرارداد پشتیبانی سامانه‌ها");
+    await page.getByLabel("شماره قرارداد", { exact: true }).fill("CT-105");
+    await page.getByLabel("تاریخ شروع (شمسی)", { exact: true }).fill("1405/01/01");
+    await page.getByLabel("تاریخ پایان اعتبار (شمسی)", { exact: true }).fill("1405/12/29");
+    await page.getByRole("button", { name: /انتخاب تاریخ.*تاریخ پایان/ }).click();
+    await page.screenshot({path: resolve(folder, `contract-calendar${theme === "dark" ? "-dark" : ""}.png`), fullPage:true});
     await page.goto("/notifications");
     await page
       .getByRole("button", { name: "افزودن ارتباط", exact: true })
@@ -636,4 +667,101 @@ test("email test targets every saved recipient", async ({ page }) => {
   await expect(page.getByRole("status").first()).toHaveText(
     "Accepted by delivery service",
   );
+});
+
+test("Persian contract dates convert to ISO and survive language switching", async ({
+  page,
+}) => {
+  await login(page, true);
+  await page.goto("/resources");
+  await page.getByRole("button", { name: "افزودن مورد", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "نوع", exact: true })
+    .selectOption("contract");
+  await page.getByLabel("شماره قرارداد", { exact: true }).fill("CT-105");
+  await page.getByLabel("عنوان", { exact: true }).fill("قرارداد پشتیبانی");
+  await page
+    .getByLabel("تاریخ شروع (شمسی)", { exact: true })
+    .fill("۱۴۰۵/۰۱/۰۱");
+  await page
+    .getByLabel("تاریخ پایان اعتبار (شمسی)", { exact: true })
+    .fill("۱۴۰۵/۱۲/۲۹");
+  await page.getByLabel("زبان", { exact: true }).selectOption("en");
+  await expect(
+    page.getByLabel("Valid from (Gregorian, UTC)", { exact: true }),
+  ).toHaveValue("2026-03-21");
+  await expect(
+    page.getByLabel("Expiry date (Gregorian, UTC)", { exact: true }),
+  ).toHaveValue("2027-03-20");
+  const sent = page.waitForRequest(
+    (r) => r.method() === "POST" && r.url().endsWith("/api/resources"),
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  expect((await sent).postDataJSON()).toMatchObject({
+    kind: "contract",
+    contractNumber: "CT-105",
+    validFrom: "2026-03-21",
+    expiresAt: "2027-03-20",
+  });
+});
+test("Jalali calendar picks dates and blocks invalid Esfand days", async ({
+  page,
+}) => {
+  await login(page, true);
+  await page.goto("/resources");
+  await page.getByRole("button", { name: "افزودن مورد", exact: true }).click();
+  await page.getByLabel("عنوان", { exact: true }).fill("تست تاریخ");
+  const date = page.getByLabel("تاریخ پایان اعتبار (شمسی)", { exact: true });
+  await date.fill("۱۴۰۰/۱۲/۳۰");
+  await expect(date).toHaveAttribute("aria-invalid", "true");
+  await page.getByRole("button", { name: /انتخاب تاریخ.*تاریخ پایان/ }).click();
+  await page.getByRole("spinbutton", { name: "سال", exact: true }).fill("1405");
+  await page
+    .getByRole("combobox", { name: "ماه", exact: true })
+    .selectOption("8");
+  await page.getByRole("button", { name: "1405/8/10", exact: true }).click();
+  await expect(date).toHaveValue("1405/08/10");
+  await page.getByLabel("زبان", { exact: true }).selectOption("en");
+  await expect(
+    page.getByLabel("Expiry date (Gregorian, UTC)", { exact: true }),
+  ).toHaveValue("2026-11-01");
+});
+test("Active Directory login selector and administration form", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await page
+    .getByRole("combobox", { name: "Sign-in method", exact: true })
+    .selectOption("ldap");
+  await page.getByLabel("Username", { exact: true }).fill("alice");
+  await page.getByLabel("Password", { exact: true }).fill("test-password");
+  const loginRequest = page.waitForRequest((r) =>
+    r.url().endsWith("/api/auth/login"),
+  );
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  expect((await loginRequest).postDataJSON().provider).toBe("ldap");
+  await page.getByLabel("Current password", { exact: true }).fill("admin");
+  await page
+    .getByLabel("New password", { exact: true })
+    .fill("a-new-safe-password");
+  await page
+    .getByLabel("Confirm password", { exact: true })
+    .fill("a-new-safe-password");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.goto("/settings");
+  await expect(
+    page.getByLabel("Search account password", { exact: true }),
+  ).toHaveValue("");
+  await page
+    .getByLabel("Directory server", { exact: true })
+    .fill("dc.example.org");
+  await page.getByLabel("Base DN", { exact: true }).fill("DC=example,DC=org");
+  await page
+    .getByRole("button", { name: "Test directory connection", exact: true })
+    .click();
+  await expect(
+    page.getByText("Directory user found in an allowed group · User", {
+      exact: true,
+    }),
+  ).toBeVisible();
 });

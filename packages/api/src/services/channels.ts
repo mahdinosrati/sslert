@@ -28,7 +28,7 @@ export interface AlertContent {
   level: string;
   hostname: string;
   daysRemaining: number | null;
-  source: "cert" | "domain" | "license" | "api";
+  source: "cert" | "domain" | "license" | "api" | "contract";
 }
 
 export interface SendResult {

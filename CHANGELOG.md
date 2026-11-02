@@ -1,3 +1,15 @@
+## 1.0.5
+
+- تقویم و ورود تاریخ شمسی در فرم فارسی با تبدیل صحیح به تاریخ ISO و اعتبارسنجی کبیسه
+- نوع قرارداد با شماره، طرف قرارداد و تاریخ شروع/پایان؛ یکپارچه با داشبورد، مجوزها و هشدارها
+- ورود Microsoft Active Directory با LDAPS/STARTTLS، گروه کاربران/مدیران، تست اتصال و حفظ مدیر محلی
+- رمزنگاری رمز حساب جست‌وجو، عدم ذخیره رمز کاربران AD و بازبینی دوره‌ای دسترسی
+- بخش توسعه‌دهندگان، راهنمای تنظیمات و تصاویر روشن/تاریک به‌روز
+
+Upgrade: back up the database, .env and notification.key, check out v1.0.5, then run docker compose up -d --build. Migration preserves existing records, assignments and users. LDAP remains disabled until an administrator configures it. Real AD connectivity requires organization settings and a trusted CA; enable HTTPS on the panel before using directory credentials.
+
+[راهنمای فارسی](https://github.com/mahdinosrati/sslert/blob/v1.0.5/README.fa.md)
+
 ## 1.0.4
 
 Action-oriented dashboard, scoped alert coverage, sortable/paginated expiry records, multi-recipient SMTP/Resend, explicit email testing and partial SMTP delivery status. Updated documentation and screenshots.

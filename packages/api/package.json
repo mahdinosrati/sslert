@@ -1,6 +1,6 @@
 {
   "name": "@sslert/api",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "license": "AGPL-3.0",
   "private": true,
   "type": "module",
@@ -29,6 +29,7 @@
     "better-sqlite3": "^11.5.0",
     "drizzle-orm": "^0.36.4",
     "hono": "^4.6.10",
+    "ldapts": "^9.2.0",
     "node-cron": "^3.0.3",
     "nodemailer": "^10.3.1",
     "pino": "^10.3.1",

@@ -129,6 +129,12 @@ export const apiTokens = sqliteTable("api_tokens", {
 });
 
 export const users = sqliteTable("users", {
+  authSource: text("auth_source")
+    .$type<"local" | "ldap">()
+    .notNull()
+    .default("local"),
+  ldapId: text("ldap_id").unique(),
+  ldapCheckedAt: text("ldap_checked_at"),
   canCreate: integer("can_create", { mode: "boolean" })
     .notNull()
     .default(false),
@@ -172,11 +178,14 @@ export const loginAttempts = sqliteTable("login_attempts", {
 });
 
 export const resources = sqliteTable("resources", {
+  contractNumber: text("contract_number").notNull().default(""),
   hostname: text("hostname").notNull().default(""),
   serial: text("serial").notNull().default(""),
   validFrom: text("valid_from"),
   id: integer("id").primaryKey({ autoIncrement: true }),
-  kind: text("kind").$type<"license" | "api" | "domain" | "cert">().notNull(),
+  kind: text("kind")
+    .$type<"license" | "api" | "domain" | "cert" | "contract">()
+    .notNull(),
   title: text("title").notNull(),
   provider: text("provider").notNull().default(""),
   owner: text("owner").notNull().default(""),

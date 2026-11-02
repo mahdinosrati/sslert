@@ -63,6 +63,7 @@ export async function ensureInitialAdmin(db: DB) {
 export function publicUser(user: typeof users.$inferSelect) {
   return {
     id: user.id,
+    authSource: user.authSource,
     username: user.username,
     role: user.role,
     canCreate: user.canCreate,

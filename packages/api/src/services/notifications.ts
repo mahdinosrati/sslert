@@ -179,6 +179,7 @@ export async function sendConnection(
           domain: "دامنه",
           license: "لایسنس نرم‌افزار",
           api: "اعتبار توکن API",
+          contract: "قرارداد",
         }[source] ?? "هشدار")
       : source;
     const subject = isTest
@@ -198,7 +199,7 @@ export async function sendConnection(
       text,
       hostname: title,
       daysRemaining: days,
-      source: (["cert", "domain", "license", "api"].includes(source)
+      source: (["cert", "domain", "license", "api", "contract"].includes(source)
         ? source
         : "cert") as AlertContent["source"],
       level,

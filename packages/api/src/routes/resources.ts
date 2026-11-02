@@ -19,13 +19,14 @@ const date = z
   });
 const shape = z
   .object({
-    kind: z.enum(["license", "api", "domain", "cert"]),
+    kind: z.enum(["license", "api", "domain", "cert", "contract"]),
     hostname: z
       .string()
       .trim()
       .max(253)
       .regex(/^[a-zA-Z0-9._-]*$/)
       .default(""),
+    contractNumber: z.string().trim().max(256).default(""),
     serial: z.string().trim().max(256).default(""),
     validFrom: date.nullable().default(null),
     title: z.string().trim().min(1).max(200),

@@ -1,3 +1,4 @@
+import { LdapSettings } from "../components/LdapSettings";
 import { useAuth } from "../lib/auth";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -63,6 +64,13 @@ export function Users() {
           >
             <div>
               <bdi>{u.username}</bdi>
+              <p className="text-xs text-slate-500">
+                {t(
+                  u.authSource === "ldap"
+                    ? "Directory account"
+                    : "Local account",
+                )}
+              </p>
               <p className="text-sm text-slate-500">
                 {t(u.role === "admin" ? "Administrator" : "User")} ·{" "}
                 {t(u.enabled ? "Enabled" : "Disabled")}
@@ -118,7 +126,9 @@ export function Users() {
                 const body = {
                   ...(!editing.id ? { username: editing.username } : {}),
                   ...(editing.password ? { password: editing.password } : {}),
-                  role: editing.role,
+                  ...(editing.authSource === "ldap"
+                    ? {}
+                    : { role: editing.role }),
                   canCreate: editing.canCreate,
                   canEdit: editing.canEdit,
                   canTest: editing.canTest,
@@ -157,6 +167,13 @@ export function Users() {
                 }
               />
             </label>
+            {editing.authSource === "ldap" && (
+              <p>
+                {t(
+                  "Directory roles and passwords are managed in Active Directory",
+                )}
+              </p>
+            )}
             <label>
               {t(
                 editing.id
@@ -164,6 +181,7 @@ export function Users() {
                   : "Password",
               )}
               <input
+                disabled={editing.authSource === "ldap"}
                 required={!editing.id}
                 type={showPassword ? "text" : "password"}
                 minLength={12}
@@ -185,6 +203,7 @@ export function Users() {
             <label>
               {t("Role")}
               <select
+                disabled={editing.authSource === "ldap"}
                 value={editing.role}
                 onChange={(e) =>
                   setEditing({
@@ -308,50 +327,53 @@ export function Settings() {
   const [port, setPort] = useState(""),
     [message, setMessage] = useState("");
   return (
-    <section className="panel max-w-xl space-y-4">
-      <h1 className="text-2xl font-semibold">{t("Server settings")}</h1>
-      <p>
-        {t(
-          "Save a port, then run the command on your server. Saving does not change the running port.",
+    <div className="max-w-3xl space-y-6">
+      <section className="panel space-y-4">
+        <h1 className="text-2xl font-semibold">{t("Server settings")}</h1>
+        <p>
+          {t(
+            "Save a port, then run the command on your server. Saving does not change the running port.",
+          )}
+        </p>
+        <form
+          className="form-grid"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await request("/api/settings/port", {
+                method: "PUT",
+                body: JSON.stringify({
+                  port: Number(port || query.data?.desiredPort),
+                }),
+              });
+              await query.refetch();
+              setMessage(t("Saved"));
+            } catch (err) {
+              setMessage(errorMessage(err));
+            }
+          }}
+        >
+          <label>
+            {t("Panel port")}
+            <input
+              type="number"
+              required
+              min={1024}
+              max={65535}
+              value={port || query.data?.desiredPort || 5173}
+              onChange={(e) => setPort(e.target.value)}
+            />
+          </label>
+          <button className="primary">{t("Save")}</button>
+        </form>
+        {query.data && (
+          <pre className="overflow-x-auto rounded bg-slate-100 p-3" dir="ltr">
+            {query.data.command}
+          </pre>
         )}
-      </p>
-      <form
-        className="form-grid"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          try {
-            await request("/api/settings/port", {
-              method: "PUT",
-              body: JSON.stringify({
-                port: Number(port || query.data?.desiredPort),
-              }),
-            });
-            await query.refetch();
-            setMessage(t("Saved"));
-          } catch (err) {
-            setMessage(errorMessage(err));
-          }
-        }}
-      >
-        <label>
-          {t("Panel port")}
-          <input
-            type="number"
-            required
-            min={1024}
-            max={65535}
-            value={port || query.data?.desiredPort || 5173}
-            onChange={(e) => setPort(e.target.value)}
-          />
-        </label>
-        <button className="primary">{t("Save")}</button>
-      </form>
-      {query.data && (
-        <pre className="overflow-x-auto rounded bg-slate-100 p-3" dir="ltr">
-          {query.data.command}
-        </pre>
-      )}
-      <p role="status">{message}</p>
-    </section>
+        <p role="status">{message}</p>
+      </section>
+      <LdapSettings />
+    </div>
   );
 }

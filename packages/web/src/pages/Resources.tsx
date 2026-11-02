@@ -1,3 +1,4 @@
+import { LocalDateInput } from "../components/LocalDateInput";
 import { useSearchParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,9 +9,10 @@ import { NotificationPolicy } from "./Notifications";
 import { formatDate } from "../lib/format";
 export interface Resource {
   id: number;
-  kind: "license" | "api" | "domain" | "cert";
+  kind: "license" | "api" | "domain" | "cert" | "contract";
   hostname: string;
   serial: string;
+  contractNumber?: string;
   validFrom: string | null;
   title: string;
   provider: string;
@@ -24,6 +26,7 @@ const kindLabels = {
   api: "API expiry",
   domain: "Manual domain",
   cert: "Private SSL certificate",
+  contract: "Contract",
 };
 export function Resources() {
   const { t } = useI18n(),
@@ -116,6 +119,7 @@ export function Resources() {
                   kind,
                   hostname: hostname ?? "",
                   serial: serial ?? "",
+                  contractNumber: editing.contractNumber || "",
                   validFrom: validFrom ?? null,
                   title,
                   provider,
@@ -153,6 +157,7 @@ export function Resources() {
                 <option value="api">{t("API expiry")}</option>
                 <option value="domain">{t("Manual domain")}</option>
                 <option value="cert">{t("Private SSL certificate")}</option>
+                <option value="contract">{t("Contract")}</option>
               </select>
             </label>
             {["domain", "cert"].includes(editing.kind) && (
@@ -170,29 +175,36 @@ export function Resources() {
                 />
               </label>
             )}
-            {editing.kind === "cert" && (
+            {["cert", "contract"].includes(editing.kind) && (
               <>
+                <LocalDateInput
+                  start
+                  value={editing.validFrom || ""}
+                  onChange={(value) =>
+                    setEditing({ ...editing, validFrom: value || null })
+                  }
+                />
                 <label>
-                  {t("Valid from (Gregorian, UTC)")}
-                  <input
-                    type="date"
-                    value={editing.validFrom ?? ""}
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        validFrom: e.target.value || null,
-                      })
-                    }
-                  />
-                </label>
-                <label>
-                  {t("Certificate serial")}
+                  {t(
+                    editing.kind === "contract"
+                      ? "Contract number"
+                      : "Certificate serial",
+                  )}
                   <input
                     dir="ltr"
                     maxLength={256}
-                    value={editing.serial}
+                    value={
+                      editing.kind === "contract"
+                        ? editing.contractNumber || ""
+                        : editing.serial
+                    }
                     onChange={(e) =>
-                      setEditing({ ...editing, serial: e.target.value })
+                      setEditing({
+                        ...editing,
+                        [editing.kind === "contract"
+                          ? "contractNumber"
+                          : "serial"]: e.target.value,
+                      })
                     }
                   />
                 </label>
@@ -204,11 +216,13 @@ export function Resources() {
                   {
                     title: "Title",
                     provider:
-                      editing.kind === "cert"
-                        ? "Issuer / CA"
-                        : editing.kind === "domain"
-                          ? "Registrar"
-                          : "Provider",
+                      editing.kind === "contract"
+                        ? "Contract party"
+                        : editing.kind === "cert"
+                          ? "Issuer / CA"
+                          : editing.kind === "domain"
+                            ? "Registrar"
+                            : "Provider",
                     owner: "Responsible person",
                   }[f],
                 )}
@@ -222,18 +236,12 @@ export function Resources() {
                 />
               </label>
             ))}
-            <label>
-              {t("Expiry date (Gregorian, UTC)")}
-              <input
-                type="date"
-                required={editing.expiresAt !== null}
-                disabled={editing.expiresAt === null}
-                value={editing.expiresAt ?? ""}
-                onChange={(e) =>
-                  setEditing({ ...editing, expiresAt: e.target.value })
-                }
-              />
-            </label>
+            <LocalDateInput
+              value={editing.expiresAt || ""}
+              required={editing.expiresAt !== null}
+              disabled={editing.expiresAt === null}
+              onChange={(value) => setEditing({ ...editing, expiresAt: value })}
+            />
             {editing.kind === "license" && (
               <label className="check-label">
                 <input
@@ -307,6 +315,11 @@ export function Resources() {
               {r.hostname && (
                 <p className="break-all font-mono" dir="ltr">
                   {r.hostname}
+                </p>
+              )}
+              {r.contractNumber && (
+                <p>
+                  {t("Contract number")}: <bdi>{r.contractNumber}</bdi>
                 </p>
               )}
               {r.serial && (

@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
@@ -11,6 +12,11 @@ export default function Login() {
   const navigate = useNavigate(),
     update = useSessionUpdate();
   const auth = useAuth();
+  const providers = useQuery({
+    queryKey: ["login-providers"],
+    queryFn: () => request<{ ldap: boolean }>("/api/auth/providers"),
+  });
+  const [provider, setProvider] = useState("local");
   const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState(""),
     [password, setPassword] = useState(""),
@@ -47,7 +53,7 @@ export default function Login() {
             try {
               const r = await request<{ user: User }>("/api/auth/login", {
                 method: "POST",
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify({ username, password, provider }),
               });
               update(r.user);
               navigate(r.user.mustChangePassword ? "/password" : "/", {
@@ -60,6 +66,19 @@ export default function Login() {
             }
           }}
         >
+          {providers.data?.ldap && (
+            <label>
+              {t("Sign-in method")}
+              <select
+                aria-label={t("Sign-in method")}
+                value={provider}
+                onChange={(e) => setProvider(e.target.value)}
+              >
+                <option value="local">{t("Local account")}</option>
+                <option value="ldap">Microsoft Active Directory</option>
+              </select>
+            </label>
+          )}
           <label>
             {t("Username")}
             <input
