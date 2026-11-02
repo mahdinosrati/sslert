@@ -14,7 +14,8 @@ export const ldapSchema = z
       .max(253)
       .regex(/^[a-zA-Z0-9.-]*$/),
     port: z.number().int().min(1).max(65535),
-    security: z.enum(["ldaps", "starttls"]),
+    security: z.enum(["ldaps", "starttls", "ldap"]),
+    adminOnly: z.boolean().default(false),
     baseDn: z.string().trim().max(2048),
     bindDn: z.string().trim().max(2048),
     bindPassword: z.string().max(4096).optional(),
@@ -27,6 +28,7 @@ export const ldapSchema = z
 export type LdapSettings = z.infer<typeof ldapSchema>;
 export const ldapDefaults: LdapSettings = {
   enabled: false,
+  adminOnly: false,
   host: "",
   port: 636,
   security: "ldaps",
@@ -52,7 +54,7 @@ export function completeLdap(settings: LdapSettings) {
     settings.baseDn &&
     settings.bindDn &&
     settings.bindPassword &&
-    (settings.userGroup || settings.adminGroup)
+    (settings.adminOnly ? settings.adminGroup : (settings.userGroup || settings.adminGroup))
   );
 }
 export function escapeLdap(value: string) {
@@ -113,7 +115,7 @@ export async function queryDirectory(
     url: `${settings.security === "ldaps" ? "ldaps" : "ldap"}://${settings.host}:${settings.port}`,
     timeout: 8000,
     connectTimeout: 8000,
-    tlsOptions: tls,
+    ...(settings.security === "ldaps" ? { tlsOptions: tls } : {}),
   });
   try {
     if (settings.security === "starttls") await client.startTLS(tls);
@@ -177,7 +179,7 @@ export async function queryDirectory(
       return result.searchEntries.length === 1;
     }
     const admin = await member(settings.adminGroup);
-    if (!admin && !(await member(settings.userGroup)))
+    if (!admin && (settings.adminOnly || !(await member(settings.userGroup))))
       throw Error("Group not allowed");
     if (identity.password !== undefined)
       await client.bind(entry.dn, identity.password);

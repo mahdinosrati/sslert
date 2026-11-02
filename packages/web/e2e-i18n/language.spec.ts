@@ -765,3 +765,16 @@ test("Active Directory login selector and administration form", async ({
     }),
   ).toBeVisible();
 });
+
+test("plain LDAP is explicit and administrator-only mode hides the user group", async ({page})=>{
+ await login(page); await page.goto("/settings");
+ await page.getByRole("combobox",{name:"Connection security",exact:true}).selectOption("ldap");
+ await expect(page.getByLabel("Directory port",{exact:true})).toHaveValue("389");
+ await expect(page.getByRole("note")).toContainText("without transport encryption");
+ await page.getByLabel("One directory group, administrator access only",{exact:true}).check();
+ await expect(page.getByLabel("Allowed user group DN",{exact:true})).toHaveCount(0);
+ await page.getByLabel("Administrator group DN",{exact:true}).fill("CN=PanelAdmins,DC=example,DC=org");
+ const sent=page.waitForRequest(r=>r.url().endsWith("/api/settings/ldap/save"));
+ await page.getByRole("button",{name:"Save directory settings",exact:true}).click();
+ expect((await sent).postDataJSON().settings).toMatchObject({security:"ldap",port:389,adminOnly:true});
+});

@@ -154,3 +154,7 @@ See the [Persian setup guide and screenshots](README.fa.md) for light/dark setti
 ## Contributors
 
 Bamdad Alert development: **[Mahdi Nosrati / MahdiNosrati](https://github.com/mahdinosrati)**, Bamdad Information Technology Group. Built on SSLert; original contributors' attribution and AGPL-3.0 licensing are preserved. GitHub's automatic Contributors list is derived from attributed commits.
+
+### Explicit plain LDAP and administrator-only directory group
+
+Select LDAP without encryption to use port 389 without a certificate. Bind and user passwords travel without TLS; this mode requires an explicitly trusted network and compatible AD policy. LDAPS remains the default and never silently falls back to plaintext. Administrator-only mode admits only the configured administrator group and grants every member full panel administration. The user group is ignored in this mode; local recovery administrators remain available.

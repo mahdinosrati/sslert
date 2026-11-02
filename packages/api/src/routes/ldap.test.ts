@@ -178,6 +178,21 @@ describe("Active Directory integration", () => {
     expect((await ldapLogin()).status).toBe(401);
     expect(store.db.select().from(users).all()).toHaveLength(1);
   });
+  it("uses explicitly selected plain LDAP and limits administrator-only login to its group", async () => {
+    const settings = {...config, security: "ldap" as const, port:389, adminOnly:true};
+    await expect(queryDirectory(settings,{username:"alice",password:"alice-password"})).rejects.toThrow("Group not allowed");
+    expect(mocks.bind).not.toHaveBeenCalledWith(entry.dn,"alice-password");
+    adminGroup=true;
+    const identity=await queryDirectory(settings,{username:"alice",password:"alice-password"});
+    expect(identity?.role).toBe("admin");
+    expect(mocks.construct).toHaveBeenLastCalledWith(expect.objectContaining({url:"ldap://dc.internal:389"}));
+    expect(mocks.construct.mock.calls.at(-1)![0]).not.toHaveProperty("tlsOptions");
+    expect(mocks.startTLS).not.toHaveBeenCalled();
+    saveLdap(store.db,settings);
+    expect((await (await ldapLogin()).json()).user.role).toBe("admin");
+    adminGroup=false;
+    expect((await ldapLogin()).status).toBe(401);
+  });
   it("requires STARTTLS before binding and always closes on failure", async () => {
     mocks.startTLS.mockRejectedValueOnce(Error("certificate failure"));
     await expect(

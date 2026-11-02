@@ -4,9 +4,10 @@ import { request } from "../lib/api";
 import { useI18n, errorMessage } from "../lib/i18n";
 type Config = {
   enabled: boolean;
+  adminOnly?: boolean;
   host: string;
   port: number;
-  security: "ldaps" | "starttls";
+  security: "ldaps" | "starttls" | "ldap";
   baseDn: string;
   bindDn: string;
   bindPassword?: string;
@@ -92,6 +93,8 @@ export function LdapSettings() {
             />
             {t("Enable Active Directory login")}
           </label>
+          <label className="check-label"><input type="checkbox" checked={!!settings.adminOnly} onChange={(e) => setSettings({...settings, adminOnly:e.target.checked})} />{t("One directory group, administrator access only")}</label>
+          {settings.adminOnly && <p>{t("Only members of the administrator group can sign in. Every member receives full panel administrator access.")}</p>}
           {(
             [
               ["host", "Directory server"],
@@ -100,7 +103,7 @@ export function LdapSettings() {
               ["userGroup", "Allowed user group DN"],
               ["adminGroup", "Administrator group DN"],
             ] as const
-          ).map(([key, label]) => (
+          ).filter(([key]) => !settings.adminOnly || key !== "userGroup").map(([key, label]) => (
             <label key={key}>
               {t(label)}
               <input
@@ -138,8 +141,10 @@ export function LdapSettings() {
             >
               <option value="ldaps">LDAPS</option>
               <option value="starttls">STARTTLS</option>
+              <option value="ldap">{t("LDAP without encryption")}</option>
             </select>
           </label>
+          {settings.security === "ldap" && <p role="note" className="text-amber-700 dark:text-amber-300">{t("Unencrypted LDAP sends search-account and user passwords without transport encryption. Use only on an explicitly trusted network.")}</p>}
           <label>
             {t("Search account password")}
             <input
