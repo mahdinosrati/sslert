@@ -24,6 +24,15 @@ WORKDIR /app
 COPY packages/api ./packages/api
 RUN cd packages/api && npx tsc -p tsconfig.json
 
+# Compile native dependencies in a disposable stage, including when prebuilt
+# downloads are unavailable. Build tools never enter the runtime image.
+FROM deps AS production-deps
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN npm ci --omit=dev --no-audit --no-fund
+RUN node -e "const D=require('better-sqlite3');const d=new D(':memory:');d.close()"
+
 # Runtime image — non-root user, lockfile-driven install.
 FROM node:22.13.1-bookworm-slim@sha256:83fdfa2a4de32d7f8d79829ea259bd6a4821f8b2d123204ac467fbe3966450fc AS runtime
 WORKDIR /app
@@ -52,8 +61,10 @@ COPY --from=build --chown=root:root      /app/package.json                     .
 COPY --from=build --chown=root:root      /app/package-lock.json                ./package-lock.json
 COPY --from=build --chown=sslert:sslert /app/packages/api/src/db/migrations   ./dist/db/migrations
 
+COPY --from=production-deps /app/node_modules ./node_modules
+COPY --from=production-deps /app/packages/api/node_modules ./packages/api/node_modules
+
 RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh \
-    && cd /app/packages/api && npm ci --omit=dev --no-audit --no-fund \
     && mkdir -p /app/node_modules/@hono \
     && cp -r /app/packages/api/node_modules/@hono/swagger-ui /app/node_modules/@hono/swagger-ui \
     && chown -R root:root /app/node_modules \
