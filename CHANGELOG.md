@@ -1,3 +1,16 @@
+## 1.0.6
+
+- LDAP بدون گواهی روی پورت ۳۸۹ به‌صورت انتخاب صریح؛ LDAPS و STARTTLS همچنان موجودند.
+- گروه LDAP فقط مجوز ورود می‌دهد؛ کاربران جدید و فعلی پس از انتقال، مشاهده‌گر همه رکوردها هستند.
+- مدیر می‌تواند نقش و مجوز ثبت، ویرایش و تست هشدار را از پنل بدهد؛ ورود مجدد آن‌ها را بازنویسی نمی‌کند.
+- نشست ورود محلی و LDAP هشت ساعت از زمان ورود اعتبار دارد.
+- راهنمای SMTP، TLS روی ۴۶۵، تست ارسال و تاریخچه؛ تصاویر فارسی روشن و تاریک به‌روز شدند.
+
+Upgrade: back up the database, .env and notification.key, check out v1.0.6 and run docker compose up -d --build. Migration resets existing LDAP accounts to read-only viewers once, revokes their API tokens and expires all existing sessions. Sign in again with a local administrator to grant additional permissions. Records and saved notification credentials are retained. LDAP plaintext mode does not encrypt credentials in transit and never activates as an automatic TLS fallback.
+
+[راهنمای فارسی](https://github.com/mahdinosrati/sslert/blob/v1.0.6/README.fa.md)
+[English guide](https://github.com/mahdinosrati/sslert/blob/v1.0.6/README.md)
+
 ## 1.0.5
 
 - تقویم و ورود تاریخ شمسی در فرم فارسی با تبدیل صحیح به تاریخ ISO و اعتبارسنجی کبیسه

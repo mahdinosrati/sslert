@@ -1,8 +1,8 @@
-# Bamdad Alert 1.0.5
+# Bamdad Alert 1.0.6
 
 Self-hosted monitoring for SSL certificates, domain registrations, software licenses and API expiry dates. Built for the Bamdad Information Technology Group.
 
-[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.5.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
+[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.6.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
 
 English is the default. Persian includes RTL layout and bundled Vazir fonts. Choose light, dark or system appearance.
 
@@ -11,7 +11,7 @@ English is the default. Persian includes RTL layout and bundled Vazir fonts. Cho
 Install Docker Engine and Compose v2 using the [official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/), then:
 
 ```bash
-git clone --branch v1.0.5 https://github.com/mahdinosrati/sslert.git
+git clone --branch v1.0.6 https://github.com/mahdinosrati/sslert.git
 cd sslert
 cp .env.example .env
 chmod 600 .env
@@ -50,7 +50,7 @@ Connections marked available to users, global connections, and connections alrea
 
 ## Accounts and access
 
-Administrators create accounts, assign domains/licenses/API records, and independently grant users permission to create records, edit assigned records and send test notifications. Users can view only assigned records. Records they create are automatically assigned to them. Deletion, account management, server settings, connection definitions/secrets and the full audit log are administrator-only. The last enabled administrator cannot be demoted or disabled.
+Administrators create accounts, assign domains/licenses/API records, and independently grant users permission to create records, edit assigned records and send test notifications. Local users view assigned records; LDAP users view all current and future records. Records they create are automatically assigned to them. Deletion, account management, server settings, connection definitions/secrets and the full audit log are administrator-only. The last enabled administrator cannot be demoted or disabled.
 
 Passwords use salted scrypt. Session cookies are HttpOnly and SameSite=Strict, expire eight hours after login, and mutating requests require `X-SSLert-Request: 1`. First login and password resets require a new password. Changing an account or its password revokes its sessions and API tokens. Login attempts are rate-limited. SMS is deferred.
 
@@ -75,7 +75,7 @@ Saving in the UI does not change the active port. The script checks availability
 
 ## Upgrade and rollback
 
-Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.5`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
+Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.6`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
 
 Migrations preserve old domains, checks and channels. Existing receiver configurations become per-domain custom policies; global email fallback is imported where applicable. Subsequent connection changes belong in the central Notifications UI. Legacy `/domains/:id/channels` configuration is retired after migration.
 
@@ -129,7 +129,7 @@ Resend remains available, with a per-connection API key or the server `RESEND_AP
 
 History includes target/connection names, channel, time and result, with status filtering and 50-row pagination. Accepted means the delivery service accepted the message, not guaranteed inbox delivery. Users see history only for assigned targets.
 
-## 1.0.5: action-oriented dashboard and multiple email recipients
+## 1.0.4: action-oriented dashboard and multiple email recipients
 
 The dashboard separates unique host counts from expiry records, shows non-overlapping 1–7 and 8–30 day cards, highlights actionable records, and offers clickable 1–7/8–30/31–60/61–90 day bars. Disabled items are excluded from future-expiry bins. The table supports search, type/status filters, sortable columns and 15-row pages, with direct resource edit/policy links. Latest checks and delivery activity retain user access restrictions.
 
@@ -143,7 +143,7 @@ New endpoint: `GET /api/notifications/coverage` returns scoped target-key → bo
 
 Manual records support contracts with number, counterparty, owner, start/end dates and notes. They participate in dashboard filters, permissions and notification policies. Persian forms accept Jalali dates and Persian/Arabic/ASCII digits with leap-year validation; English forms remain Gregorian. API/storage use ISO Gregorian dates.
 
-Administrators can configure AD under Settings: DNS hostname, Base DN, read-only bind account/password, sAMAccountName or userPrincipalName, and explicit user/admin group DNs. Use LDAPS (636) or STARTTLS (389), with a trusted certificate and optional organization CA in PEM format. Nested group membership is supported; primary-group-only membership is not. Group membership permits login only; it never grants administrator privileges. Test connection and optionally user lookup before enabling. Test lookup does not verify the user's password.
+Administrators can configure AD under Settings: DNS hostname, Base DN, read-only bind account/password, sAMAccountName or userPrincipalName, and an allowed group DN. Use LDAPS (636) or STARTTLS (389), with a trusted certificate and optional organization CA in PEM format. Nested group membership is supported; primary-group-only membership is not. Group membership permits login only; it never grants administrator privileges. Test connection and optionally user lookup before enabling. Test lookup does not verify the user's password.
 
 LDAP is disabled by default. Local login and the last enabled local administrator are retained for recovery. AD accounts are provisioned after successful login with an ad: prefix; LDAP users initially see all current and future records without write/test permissions. Administrators grant additional permissions and roles in the panel; LDAP login/revalidation preserves those grants. User passwords are never stored; the bind password is encrypted with notification.key. Back up that key alongside the database and .env.
 
@@ -158,3 +158,14 @@ Bamdad Alert development: **[Mahdi Nosrati / MahdiNosrati](https://github.com/ma
 ### Explicit plain LDAP and administrator-only directory group
 
 Select LDAP without encryption to use port 389 without a certificate. Bind and user passwords travel without TLS; this mode requires an explicitly trusted network and compatible AD policy. LDAPS remains the default and never silently falls back to plaintext. Single-group mode admits only the configured allowed group. New accounts have read-only access to all records, and only panel administrators can grant more permissions or an administrator role. Existing LDAP accounts are reset to viewers once during migration; existing sessions expire and users must sign in again. Local recovery administrators remain available.
+
+## 1.0.6: panel-managed LDAP permissions and eight-hour sessions
+
+LDAP group membership permits login only. New LDAP users can read all current and future records; administrators grant create, edit-all, test-notification permissions or administrator roles in Users & access. LDAP reauthentication preserves panel grants. Add members through the group Members tab, not an account Security ACL.
+
+Local and LDAP sessions expire eight hours after login, without sliding renewal. The one-time upgrade resets existing LDAP accounts to viewers, revokes their API tokens and expires all existing sessions. Local administrators remain available. Later restarts preserve newly granted permissions.
+
+SMTP setup requires the server hostname, sender, authentication credentials and recipients. Use implicit TLS on 465 or STARTTLS on the provider-supported port (commonly 587). Save the connection, select it in the global or item policy, and send a test email. Check delivery history and recipient inbox separately. Documentation screenshots use fictional data and contain no organization credentials.
+
+![LDAP permissions, light](docs/images/fa/ldap-permissions.png)
+![LDAP permissions, dark](docs/images/fa/ldap-permissions-dark.png)

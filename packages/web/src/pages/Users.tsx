@@ -272,7 +272,7 @@ export function Users() {
                     </label>
                   ))}
                 </fieldset>
-                <fieldset>
+                <fieldset hidden={editing.authSource === "ldap"}>
                   <legend>{t("Assigned manual records")}</legend>
                   {resources.data?.resources.map((r) => (
                     <label className="check-label" key={r.id}>

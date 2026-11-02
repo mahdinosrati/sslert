@@ -419,6 +419,12 @@ test("documentation screenshots in light and dark themes", async ({
     ]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
+      if(path === "/settings") {
+        await page.getByLabel("استفاده از یک گروه مجاز LDAP",{exact:true}).check();
+        await page.getByRole("combobox",{name:"امنیت اتصال",exact:true}).selectOption("ldap");
+        await page.getByLabel("سرور دایرکتوری",{exact:true}).fill("dc.example.org");
+        await page.getByLabel("DN گروه مجاز LDAP",{exact:true}).fill("CN=PanelUsers,OU=Groups,DC=example,DC=org");
+      }
       await page.evaluate(() => document.fonts.ready);
       await page.screenshot({
         path: resolve(folder, `${name}${theme === "dark" ? "-dark" : ""}.png`),
@@ -439,7 +445,10 @@ test("documentation screenshots in light and dark themes", async ({
       .getByRole("button", { name: "افزودن ارتباط", exact: true })
       .click();
     await page.getByLabel("روش ارسال ایمیل").selectOption("smtp");
-    await page.getByLabel("سرور SMTP").fill("mail.internal.example");
+    await page.getByLabel("سرور SMTP").fill("mail.example.org");
+    await page.getByLabel("پورت SMTP",{exact:true}).fill("465");
+    await page.getByRole("combobox",{name:"امنیت اتصال",exact:true}).selectOption("tls");
+    await page.getByLabel("ایمیل فرستنده",{exact:true}).fill("panel@example.org");
     await page
       .getByLabel("ایمیل‌های گیرنده", { exact: true })
       .fill("operations@example.com\nadmin@example.com");
@@ -790,4 +799,14 @@ test("administrator can grant roles and edits to LDAP users from the panel",asyn
  const sent=page.waitForRequest(r=>r.method()==="PATCH"&&r.url().endsWith("/api/users/2"));
  await page.getByRole("button",{name:"Save",exact:true}).click();
  expect((await sent).postDataJSON()).toMatchObject({role:"user",canEdit:true});
+});
+
+test("LDAP permission documentation screenshots",async({page},info)=>{
+ await login(page);
+ await page.route("**/api/users",r=>r.fulfill({json:{users:[{id:2,username:"ad:operator",authSource:"ldap",role:"user",enabled:true,canCreate:false,canEdit:false,canTest:false,domainIds:[],resourceIds:[]}]}}));
+ await page.goto("/users");await page.getByRole("button",{name:"Edit",exact:true}).click();
+ await page.getByLabel("Language",{exact:true}).selectOption("fa");
+ await page.setViewportSize({width:1440,height:1000});
+ const folder=process.env.SSLERT_DOC_SCREENSHOTS==="1"?fileURLToPath(new URL("../../../docs/images/fa",import.meta.url)):info.outputPath("docs");await mkdir(folder,{recursive:true});
+ for(const theme of ["light","dark"]){await page.getByLabel("ظاهر",{exact:true}).selectOption(theme);await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:resolve(folder,`ldap-permissions${theme==="dark"?"-dark":""}.png`),fullPage:true});}
 });
