@@ -1,6 +1,6 @@
 import { createServer } from "node:net";
 import { describe, it, expect } from "vitest";
-import { getChannelSender } from "./channels.js";
+import { getChannelSender, smtpFailureCode } from "./channels.js";
 describe("SMTP delivery", () => {
   it("delivers to an internal relay and refuses missing STARTTLS", async () => {
     const messages: string[] = [];
@@ -93,3 +93,5 @@ describe("SMTP delivery", () => {
     }
   });
 });
+
+it("classifies SMTP failures without returning provider responses or secrets",()=>{expect(smtpFailureCode({code:"EAUTH",response:"private"})).toBe("smtp_auth");expect(smtpFailureCode({code:"ETIMEDOUT"})).toBe("smtp_timeout");expect(smtpFailureCode({code:"ECONNRESET"})).toBe("smtp_connection");expect(smtpFailureCode({code:"CERT_HAS_EXPIRED"})).toBe("smtp_tls");expect(smtpFailureCode({responseCode:451})).toBe("smtp_temporary");expect(smtpFailureCode({responseCode:550})).toBe("smtp_rejected");expect(smtpFailureCode(null)).toBe("smtp_unknown")});

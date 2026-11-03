@@ -35,6 +35,7 @@ export interface SendResult {
   id?: string;
   error?: string;
   partial?: boolean;
+  failureCode?: "smtp_auth" | "smtp_tls" | "smtp_timeout" | "smtp_connection" | "smtp_rejected" | "smtp_temporary" | "smtp_unknown";
 }
 
 export interface AlertChannelSender {
@@ -46,6 +47,16 @@ export interface AlertChannelSender {
   ): Promise<SendResult>;
 }
 
+export function smtpFailureCode(error: unknown): NonNullable<SendResult["failureCode"]> {
+  const e=error as {code?:string;responseCode?:number};
+  if(e?.code === "EAUTH") return "smtp_auth";
+  if(e?.code === "ETLS" || /CERT|TLS|SSL/.test(e?.code || "")) return "smtp_tls";
+  if(e?.code === "ETIMEDOUT") return "smtp_timeout";
+  if(["ECONNECTION","ECONNRESET","ECONNREFUSED","EDNS","ENOTFOUND","EAI_AGAIN","ESOCKET"].includes(e?.code || "")) return "smtp_connection";
+  if(e?.responseCode && e.responseCode>=400 && e.responseCode<500) return "smtp_temporary";
+  if(e?.responseCode && e.responseCode>=500) return "smtp_rejected";
+  return "smtp_unknown";
+}
 // ---------- Email (Resend) ----------
 
 class ResendEmailSender implements AlertChannelSender {
@@ -102,8 +113,8 @@ class ResendEmailSender implements AlertChannelSender {
         return result.accepted.length
           ? { id: result.messageId, partial: result.rejected.length > 0 }
           : { error: "SMTP recipient rejected" };
-      } catch {
-        return { error: "SMTP delivery failed" };
+      } catch (error) {
+        return { error: "SMTP delivery failed", failureCode: smtpFailureCode(error) };
       } finally {
         transport.close();
       }

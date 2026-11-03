@@ -23,7 +23,7 @@ import { __resetRateLimiterForTests } from "../middleware/rate-limit.js";
 import { eq } from "drizzle-orm";
 const send = vi.hoisted(() =>
   vi.fn(
-    async (..._args: any[]): Promise<{ id: string; partial?: boolean }> => ({
+    async (..._args: any[]): Promise<{ id?: string; partial?: boolean; error?: string; failureCode?: string }> => ({
       id: "sent-1",
     }),
   ),
@@ -366,6 +366,19 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
       .run();
     await dispatchExpiry(store.db, "resource:2", "license", "License", 0);
     expect(send).toHaveBeenCalledTimes(3);
+  });
+  it("retries failed delivery after fifteen minutes without waiting the seven-day repeat window",async()=>{
+    const conn=store.db.insert(connections).values({name:"SMTP",channel:"email",config:"{}"}).returning().get()!;
+    store.db.update(notificationPolicies).set({connectionIds:JSON.stringify([conn.id]),repeatHours:168}).where(eq(notificationPolicies.key,"global")).run();
+    send.mockResolvedValueOnce({error:"provider password must never appear",failureCode:"smtp_timeout"});
+    await dispatchExpiry(store.db,"domain:4","cert","example.org",10);
+    expect(store.db.select().from(deliveries).get()).toMatchObject({status:"failed",error:"SMTP connection timed out."});
+    await dispatchExpiry(store.db,"domain:4","cert","example.org",10);expect(send).toHaveBeenCalledTimes(1);
+    store.db.update(deliveries).set({createdAt:new Date(Date.now()-16*60_000).toISOString()}).run();
+    await Promise.all([dispatchExpiry(store.db,"domain:4","cert","example.org",10),dispatchExpiry(store.db,"domain:4","cert","example.org",10)]);
+    expect(send).toHaveBeenCalledTimes(2);expect(store.db.select().from(deliveries).all().map(x=>x.status)).toEqual(["failed","sent"]);
+    store.db.update(deliveries).set({createdAt:new Date(Date.now()-60*60_000).toISOString()}).where(eq(deliveries.status,"sent")).run();
+    await dispatchExpiry(store.db,"domain:4","cert","example.org",10);expect(send).toHaveBeenCalledTimes(2);
   });
   it("checks API/license dates but skips perpetual and disabled records", async () => {
     const conn = store.db

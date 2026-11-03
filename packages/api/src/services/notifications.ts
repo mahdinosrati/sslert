@@ -1,5 +1,5 @@
 import { openConfig } from "./notification-secrets.js";
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, or, ne } from "drizzle-orm";
 import type { DB } from "../db/index.js";
 import {
   connections,
@@ -144,11 +144,14 @@ export async function sendConnection(
           eq(deliveries.connectionId, connection.id),
           eq(deliveries.level, level),
           eq(deliveries.isTest, isTest),
-          gte(
+          or(
+          and(ne(deliveries.status, "failed"), gte(
             deliveries.createdAt,
             new Date(
               Date.now() - (isTest ? 30_000 : repeatHours * 3600_000),
             ).toISOString(),
+          )),
+          and(eq(deliveries.status,"failed"),gte(deliveries.createdAt,new Date(Date.now()-(isTest?30_000:15*60_000)).toISOString()))
           ),
         ),
       )
@@ -170,6 +173,7 @@ export async function sendConnection(
   });
   if (!claim) return { status: "deduped" };
   let status = "failed";
+  let failureMessage = "Delivery failed. Check connection settings.";
   try {
     const config = openConfig(JSON.parse(connection.config));
     const fa = config.language === "fa";
@@ -207,6 +211,8 @@ export async function sendConnection(
     const result = await getChannelSender(
       connection.channel as ChannelName,
     ).send(content, config, process.env);
+    const reasons: Record<string,string> = {smtp_auth:"SMTP authentication failed.",smtp_tls:"SMTP TLS verification failed.",smtp_timeout:"SMTP connection timed out.",smtp_connection:"SMTP connection failed.",smtp_rejected:"SMTP server rejected the message or recipient.",smtp_temporary:"SMTP server temporarily rejected delivery.",smtp_unknown:"SMTP delivery failed."};
+    if(result.failureCode) failureMessage=reasons[result.failureCode] || failureMessage;
     status = result.error
       ? "failed"
       : result.partial
@@ -223,7 +229,7 @@ export async function sendConnection(
       status,
       error:
         status === "failed"
-          ? "Delivery failed. Check connection settings."
+          ? failureMessage
           : status === "partial"
             ? "Some recipients were rejected by the email server."
             : null,

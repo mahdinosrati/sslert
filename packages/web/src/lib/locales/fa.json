@@ -417,5 +417,12 @@
   "Allowed LDAP group DN": "DN گروه مجاز LDAP",
   "Group membership permits login only. New LDAP users can view all records; administrators grant additional permissions in this panel.": "عضویت گروه فقط اجازه ورود می‌دهد. کاربران جدید LDAP همه رکوردها را مشاهده می‌کنند؛ مدیر مجوزهای بیشتر را از همین پنل می‌دهد.",
   "LDAP verifies identity and group membership. Roles and permissions are managed in this panel. Keep a local administrator for recovery.": "LDAP هویت و عضویت گروه را بررسی می‌کند. نقش و مجوزها در پنل مدیریت می‌شوند. یک مدیر محلی برای بازیابی دسترسی نگه دارید.",
-  "Use a dedicated LDAP group. Nested membership is supported; primary-group-only membership is not. Group membership never grants administrator access automatically.": "از گروه اختصاصی LDAP استفاده کنید. عضویت تودرتو پشتیبانی می‌شود؛ عضویت صرفاً از طریق گروه اصلی کافی نیست. عضویت گروه به‌صورت خودکار دسترسی مدیر نمی‌دهد."
+  "Use a dedicated LDAP group. Nested membership is supported; primary-group-only membership is not. Group membership never grants administrator access automatically.": "از گروه اختصاصی LDAP استفاده کنید. عضویت تودرتو پشتیبانی می‌شود؛ عضویت صرفاً از طریق گروه اصلی کافی نیست. عضویت گروه به‌صورت خودکار دسترسی مدیر نمی‌دهد.",
+  "SMTP authentication failed.": "احراز هویت SMTP ناموفق بود.",
+  "SMTP TLS verification failed.": "بررسی اتصال امن یا گواهی SMTP ناموفق بود.",
+  "SMTP connection timed out.": "مهلت اتصال یا پاسخ SMTP تمام شد.",
+  "SMTP connection failed.": "اتصال به سرور SMTP برقرار نشد یا قطع شد.",
+  "SMTP server rejected the message or recipient.": "سرور SMTP پیام یا گیرنده را رد کرد.",
+  "SMTP server temporarily rejected delivery.": "سرور SMTP موقتاً ارسال را نپذیرفت.",
+  "SMTP delivery failed.": "ارسال SMTP ناموفق بود."
 }
