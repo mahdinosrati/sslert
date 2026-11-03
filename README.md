@@ -1,8 +1,8 @@
-# Bamdad Alert 1.0.6
+# Bamdad Alert 1.0.7
 
 Self-hosted monitoring for SSL certificates, domain registrations, software licenses and API expiry dates. Built for the Bamdad Information Technology Group.
 
-[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.6.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
+[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.7.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
 
 English is the default. Persian includes RTL layout and bundled Vazir fonts. Choose light, dark or system appearance.
 
@@ -11,7 +11,7 @@ English is the default. Persian includes RTL layout and bundled Vazir fonts. Cho
 Install Docker Engine and Compose v2 using the [official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/), then:
 
 ```bash
-git clone --branch v1.0.6 https://github.com/mahdinosrati/sslert.git
+git clone --branch v1.0.7 https://github.com/mahdinosrati/sslert.git
 cd sslert
 cp .env.example .env
 chmod 600 .env
@@ -75,7 +75,7 @@ Saving in the UI does not change the active port. The script checks availability
 
 ## Upgrade and rollback
 
-Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.6`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
+Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.7`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
 
 Migrations preserve old domains, checks and channels. Existing receiver configurations become per-domain custom policies; global email fallback is imported where applicable. Subsequent connection changes belong in the central Notifications UI. Legacy `/domains/:id/channels` configuration is retired after migration.
 
@@ -169,3 +169,11 @@ SMTP setup requires the server hostname, sender, authentication credentials and 
 
 ![LDAP permissions, light](docs/images/fa/ldap-permissions.png)
 ![LDAP permissions, dark](docs/images/fa/ldap-permissions-dark.png)
+
+## 1.0.7: failed-delivery retries and SMTP diagnostics
+
+A failed delivery no longer consumes the successful-alert repeat window. Previously, a transient failure with a 168-hour policy could suppress the same alert for seven days. Failed attempts become eligible after 15 minutes and retry at the next monitoring run, provided the item still qualifies. There is no separate 15-minute timer: an hourly schedule normally retries at its next hourly run.
+
+Successful, partial and pending deliveries retain the policy repeat window; manual tests retain their 30-second cooldown. Retry attempts create separate history entries without rewriting previous failures. New SMTP failures distinguish authentication, TLS/certificate, timeout, connection, temporary rejection and message/recipient rejection without exposing raw provider responses or credentials. Historical generic failures cannot be reconstructed. Sent means accepted by the sending service, not guaranteed inbox placement.
+
+Upgrading from 1.0.6 adds no database migration and preserves records, grants, sessions and saved connections. Back up the database, .env and notification.key before upgrading.

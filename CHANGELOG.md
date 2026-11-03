@@ -1,3 +1,16 @@
+## 1.0.7
+
+- اصلاح توقف طولانی تلاش مجدد: ارسال ناموفق دیگر بازه تکرار هشدار موفق را مصرف نمی‌کند.
+- تلاش مجدد پس از حداقل ۱۵ دقیقه در نوبت بعدی پایش؛ بازه تکرار ارسال موفق/ناقص و فاصله تست دستی حفظ شده است.
+- نمایش دسته خطای SMTP شامل اتصال، مهلت پاسخ، TLS، احراز هویت و رد پیام؛ بدون افشای پاسخ خام یا رمزها.
+- حفظ سوابق ناموفق و ثبت جداگانه هر تلاش جدید؛ مستندات فارسی و انگلیسی به‌روز شدند.
+
+Failed deliveries now retry on the next eligible monitoring run after a 15-minute cooldown, rather than waiting the successful-alert repeat window. Successful, partial and pending deliveries keep the policy window; manual tests keep a 30-second cooldown. Existing failure history is preserved. SMTP diagnostics are categorized without exposing provider responses or credentials.
+
+Upgrade: back up the database, .env and notification.key, check out v1.0.7, then run docker compose up -d --build. No new database migration is introduced relative to 1.0.6. Existing records, permissions, sessions and saved connections are retained. Upgrades from older versions still apply their pending migrations.
+
+[راهنمای فارسی](https://github.com/mahdinosrati/sslert/blob/v1.0.7/README.fa.md) · [English guide](https://github.com/mahdinosrati/sslert/blob/v1.0.7/README.md)
+
 ## 1.0.6
 
 - LDAP بدون گواهی روی پورت ۳۸۹ به‌صورت انتخاب صریح؛ LDAPS و STARTTLS همچنان موجودند.
