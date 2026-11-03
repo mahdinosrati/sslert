@@ -17,6 +17,8 @@ interface Policy {
   connectionIds: number[];
   thresholds: number[];
   repeatHours: number;
+  recipients?: { userId: number; connectionId: number }[];
+  scheduleMode?: string;
 }
 export function NotificationPolicy({ targetKey }: { targetKey: string }) {
   const { t } = useI18n(),
@@ -34,13 +36,25 @@ export function NotificationPolicy({ targetKey }: { targetKey: string }) {
     queryFn: () =>
       request<{ connections: Connection[] }>("/api/notifications/connections"),
   });
+  const recipientsQuery = useQuery({
+    queryKey: ["users"],
+    enabled: user?.role === "admin",
+    queryFn: () =>
+      request<{ users: { id: number; username: string; enabled: boolean }[] }>(
+        "/api/users",
+      ),
+  });
+  const [recipientUser, setRecipientUser] = useState(0),
+    [recipientConnection, setRecipientConnection] = useState(0);
   const [policy, setPolicy] = useState<Policy>({
       mode: "inherit",
       connectionIds: [],
-      thresholds: [30, 7, 1, 0],
+      thresholds: [30, 20, 10, 7, 6, 5, 4, 3, 2, 1, 0],
+      recipients: [],
+      scheduleMode: "milestones",
       repeatHours: 24,
     }),
-    [thresholds, setThresholds] = useState("30,7,1,0"),
+    [thresholds, setThresholds] = useState("30,20,10,7,6,5,4,3,2,1,0"),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -78,6 +92,8 @@ export function NotificationPolicy({ targetKey }: { targetKey: string }) {
               }),
             });
             await cache.invalidateQueries({ queryKey: ["policy", targetKey] });
+            await cache.invalidateQueries({ queryKey: ["subscriptions"] });
+            await cache.invalidateQueries({ queryKey: ["coverage"] });
             setMessage(t("Saved"));
           } catch (err) {
             setMessage(errorMessage(err));
@@ -122,6 +138,127 @@ export function NotificationPolicy({ targetKey }: { targetKey: string }) {
                   </label>
                 ))}
               </div>
+              {user?.role === "admin" && (
+                <div className="space-y-2">
+                  <p>{t("User recipients")}</p>
+                  <p className="text-sm text-slate-500">
+                    {t(
+                      "Selected connections above use their saved destinations. User recipients below use each user's contact details.",
+                    )}
+                  </p>
+                  {(policy.recipients || []).map((r, i) => (
+                    <div className="flex gap-2 items-center" key={i}>
+                      <bdi>
+                        {recipientsQuery.data?.users.find(
+                          (u) => u.id === r.userId,
+                        )?.username || r.userId}
+                      </bdi>
+                      <span>
+                        ·{" "}
+                        {connections.data?.connections.find(
+                          (c) => c.id === r.connectionId,
+                        )?.name || r.connectionId}
+                      </span>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() =>
+                          setPolicy({
+                            ...policy,
+                            recipients: policy.recipients?.filter(
+                              (_, j) => i !== j,
+                            ),
+                          })
+                        }
+                      >
+                        {t("Remove")}
+                      </button>
+                    </div>
+                  ))}
+                  <label>
+                    {t("User")}
+                    <select
+                      value={recipientUser}
+                      onChange={(e) => setRecipientUser(Number(e.target.value))}
+                    >
+                      <option value={0}>—</option>
+                      {recipientsQuery.data?.users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.username}
+                          {!u.enabled ? " (" + t("Disabled") + ")" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    {t("Connection")}
+                    <select
+                      value={recipientConnection}
+                      onChange={(e) =>
+                        setRecipientConnection(Number(e.target.value))
+                      }
+                    >
+                      <option value={0}>—</option>
+                      {connections.data?.connections
+                        .filter((c) =>
+                          ["email", "sms", "telegram"].includes(c.channel),
+                        )
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={!recipientUser || !recipientConnection}
+                    onClick={() => {
+                      if (
+                        !(policy.recipients || []).some(
+                          (r) =>
+                            r.userId === recipientUser &&
+                            r.connectionId === recipientConnection,
+                        )
+                      )
+                        setPolicy({
+                          ...policy,
+                          recipients: [
+                            ...(policy.recipients || []),
+                            {
+                              userId: recipientUser,
+                              connectionId: recipientConnection,
+                            },
+                          ],
+                        });
+                    }}
+                  >
+                    {t("Add recipient")}
+                  </button>
+                </div>
+              )}
+              <label>
+                {t("Schedule")}
+                <select
+                  value={policy.scheduleMode || "milestones"}
+                  onChange={(e) =>
+                    setPolicy({ ...policy, scheduleMode: e.target.value })
+                  }
+                >
+                  <option value="milestones">
+                    {t("Once per expiry milestone")}
+                  </option>
+                  <option value="repeat">
+                    {t("Repeat by hours (legacy)")}
+                  </option>
+                </select>
+              </label>
+              <p className="text-sm text-slate-500">
+                {t(
+                  "Only the latest missed milestone is sent. Renewal starts a new cycle. Day zero is the final alert.",
+                )}
+              </p>
               <label>
                 {t("Reminder days (comma-separated)")}
                 <input
@@ -132,22 +269,24 @@ export function NotificationPolicy({ targetKey }: { targetKey: string }) {
                   onChange={(e) => setThresholds(e.target.value)}
                 />
               </label>
-              <label>
-                {t("Repeat every (hours)")}
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  max={8760}
-                  value={policy.repeatHours}
-                  onChange={(e) =>
-                    setPolicy({
-                      ...policy,
-                      repeatHours: Number(e.target.value),
-                    })
-                  }
-                />
-              </label>
+              {policy.scheduleMode === "repeat" && (
+                <label>
+                  {t("Repeat every (hours)")}
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={8760}
+                    value={policy.repeatHours}
+                    onChange={(e) =>
+                      setPolicy({
+                        ...policy,
+                        repeatHours: Number(e.target.value),
+                      })
+                    }
+                  />
+                </label>
+              )}
             </>
           )}
           {editable && <button className="primary">{t("Save")}</button>}
@@ -222,7 +361,7 @@ export function Notifications() {
               {t(c.enabled ? "Enabled" : "Disabled")}
             </p>
             <div className="flex flex-wrap gap-2">
-              {permits(user, "canTest") && (
+              {permits(user, "canTest") && c.channel !== "sms" && (
                 <button
                   className="secondary"
                   disabled={busy}
@@ -297,6 +436,7 @@ export function Notifications() {
                 }
                 delete body.config.smtpPasswordSet;
                 delete body.config.resendApiKeySet;
+                delete body.config.smsAuthTokenSet;
                 await request(
                   `/api/notifications/connections${id ? `/${id}` : ""}`,
                   { method: id ? "PUT" : "POST", body: JSON.stringify(body) },
@@ -323,17 +463,116 @@ export function Notifications() {
                   setEditing({
                     ...editing,
                     channel: e.target.value,
+                    enabled: e.target.value !== "sms",
                     config: { language: "en" },
                   })
                 }
               >
-                {["email", "telegram", "webhook", "slack", "ntfy"].map((v) => (
-                  <option key={v} value={v}>
-                    {t(v)}
-                  </option>
-                ))}
+                {["email", "telegram", "webhook", "slack", "ntfy", "sms"].map(
+                  (v) => (
+                    <option key={v} value={v}>
+                      {t(v)}
+                    </option>
+                  ),
+                )}
               </select>
             </label>
+            {editing.channel === "sms" && (
+              <fieldset className="space-y-3">
+                <legend>{t("SMS pattern (draft)")}</legend>
+                <p>
+                  {t(
+                    "SMS sending is disabled until the template, response format and test number are verified.",
+                  )}
+                </p>
+                <label>
+                  {t("SMS API URL")}
+                  <input
+                    dir="ltr"
+                    type="url"
+                    value={editing.config.smsUrl || ""}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        config: {
+                          ...editing.config,
+                          smsUrl: e.target.value || undefined,
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  {t("Pattern ID")}
+                  <input
+                    type="number"
+                    min={1}
+                    value={editing.config.smsBodyId || ""}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        config: {
+                          ...editing.config,
+                          smsBodyId: Number(e.target.value) || undefined,
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  {t("Ordered variables (title, days, source, expiry)")}
+                  <input
+                    dir="ltr"
+                    value={(editing.config.smsVariables || []).join(",")}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        config: {
+                          ...editing.config,
+                          smsVariables: e.target.value
+                            .split(",")
+                            .map((v) => v.trim())
+                            .filter(Boolean),
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  {t("Test mobile number")}
+                  <input
+                    dir="ltr"
+                    value={editing.config.smsTestNumber || ""}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        config: {
+                          ...editing.config,
+                          smsTestNumber: e.target.value || undefined,
+                        },
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  {t("Optional API token")}
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={editing.config.smsAuthToken || ""}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        config: {
+                          ...editing.config,
+                          smsAuthToken: e.target.value || undefined,
+                        },
+                      })
+                    }
+                  />
+                </label>
+              </fieldset>
+            )}
             <label>
               {t("Alert language")}
               <select
@@ -557,15 +796,17 @@ export function Notifications() {
                 </span>
               </label>
             )}
-            {(editing.channel === "email"
-              ? ["from"]
-              : editing.channel === "telegram"
-                ? ["botToken", "chatId"]
-                : editing.channel === "ntfy"
-                  ? ["topic", "server"]
-                  : editing.channel === "webhook"
-                    ? ["url", "secret"]
-                    : ["url"]
+            {(editing.channel === "sms"
+              ? []
+              : editing.channel === "email"
+                ? ["from"]
+                : editing.channel === "telegram"
+                  ? ["botToken", "chatId"]
+                  : editing.channel === "ntfy"
+                    ? ["topic", "server"]
+                    : editing.channel === "webhook"
+                      ? ["url", "secret"]
+                      : ["url"]
             ).map((field) => (
               <label key={field}>
                 {t(
@@ -607,6 +848,7 @@ export function Notifications() {
               <input
                 type="checkbox"
                 checked={editing.enabled}
+                disabled={editing.channel === "sms"}
                 onChange={(e) =>
                   setEditing({ ...editing, enabled: e.target.checked })
                 }
@@ -677,6 +919,11 @@ export function Notifications() {
                   </td>
                   <td className="p-2">
                     <bdi>{r.targetName || r.targetKey}</bdi>
+                    {r.recipient && (
+                      <p className="text-xs" dir="ltr">
+                        {r.recipient}
+                      </p>
+                    )}
                     {r.isTest && ` · ${t("Test")}`}
                   </td>
                   <td className="p-2">{t(r.source)}</td>

@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { DB } from "../db/index.js";
 import {
   users,
+  notificationPolicies,
   sessions,
   userDomains,
   userResources,
@@ -36,6 +37,26 @@ const usernameSchema = z
   .max(64)
   .regex(/^[a-zA-Z0-9_.-]+$/)
   .transform((s) => s.toLowerCase());
+const contactShape = {
+  email: z
+    .union([z.literal(""), z.string().trim().email().max(254)])
+    .optional(),
+  mobile: z
+    .string()
+    .trim()
+    .regex(/^(?:\+?[0-9]{7,15})?$/)
+    .optional(),
+  telegramId: z
+    .string()
+    .trim()
+    .regex(/^-?[0-9]*$/)
+    .max(32)
+    .optional(),
+  notificationChannels: z
+    .array(z.enum(["email", "sms", "telegram"]))
+    .max(3)
+    .optional(),
+};
 const permissionsShape = {
   canCreate: z.boolean().optional(),
   canEdit: z.boolean().optional(),
@@ -296,6 +317,7 @@ export function createAccountRouter(db: DB) {
     password: passwordSchema,
     role: roleSchema,
     ...permissionsShape,
+    ...contactShape,
     resourceIds: z.array(z.number().int().positive()).max(1000).default([]),
     domainIds: z.array(z.number().int().positive()).max(1000).default([]),
   });
@@ -332,6 +354,10 @@ export function createAccountRouter(db: DB) {
           canCreate: data.canCreate,
           canEdit: data.canEdit,
           canTest: data.canTest,
+          email: data.email,
+          mobile: data.mobile,
+          telegramId: data.telegramId,
+          notificationChannels: JSON.stringify(data.notificationChannels || []),
           mustChangePassword: true,
         })
         .returning()
@@ -373,6 +399,20 @@ export function createAccountRouter(db: DB) {
       )
         return "last";
       revokeUserAccess(tx, id);
+      for (const policy of tx.select().from(notificationPolicies).all())
+        tx.update(notificationPolicies)
+          .set({
+            recipients: JSON.stringify(
+              (
+                JSON.parse(policy.recipients) as {
+                  userId: number;
+                  connectionId: number;
+                }[]
+              ).filter((r) => r.userId !== id),
+            ),
+          })
+          .where(eq(notificationPolicies.key, policy.key))
+          .run();
       tx.delete(users).where(eq(users.id, id)).run();
       return "ok";
     });
@@ -387,6 +427,7 @@ export function createAccountRouter(db: DB) {
     const parsed = z
       .object({
         ...permissionsShape,
+        ...contactShape,
         role: roleSchema.optional(),
         enabled: z.boolean().optional(),
         password: passwordSchema.optional(),
@@ -402,10 +443,7 @@ export function createAccountRouter(db: DB) {
       );
     const input = parsed.data;
     const user = db.select().from(users).where(eq(users.id, id)).get();
-    if (
-      user?.authSource === "ldap" &&
-      input.password !== undefined
-    )
+    if (user?.authSource === "ldap" && input.password !== undefined)
       return c.json(
         {
           error:
@@ -452,6 +490,14 @@ export function createAccountRouter(db: DB) {
         if (admins.length <= 1) return null;
       }
       const update = {
+        ...(input.email !== undefined ? { email: input.email } : {}),
+        ...(input.mobile !== undefined ? { mobile: input.mobile } : {}),
+        ...(input.telegramId !== undefined
+          ? { telegramId: input.telegramId }
+          : {}),
+        ...(input.notificationChannels !== undefined
+          ? { notificationChannels: JSON.stringify(input.notificationChannels) }
+          : {}),
         ...(input.canCreate !== undefined
           ? { canCreate: input.canCreate }
           : {}),

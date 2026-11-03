@@ -84,10 +84,10 @@ export function createSettingsRouter(db: DB) {
   app.get("/", (c) => c.json(response(read())));
   app.put("/port", async (c) => {
     const parsed = z
-      .object({ port: z.number().int().min(1024).max(65535) })
+      .object({ port: z.number().int().min(1).max(65535) })
       .safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
-      return c.json({ error: "Port must be between 1024 and 65535" }, 400);
+      return c.json({ error: "Port must be between 1 and 65535" }, 400);
     const port = parsed.data.port;
     db.insert(appSettings)
       .values({ key: "desired_web_port", value: String(port) })

@@ -468,12 +468,20 @@ export async function processCheckAlert(
   if (!domain) return { cert: null, domain: null };
 
   if (centralEnabled(db)) {
+    const check = db
+      .select()
+      .from(checks)
+      .where(
+        and(eq(checks.id, input.checkId), eq(checks.domainId, input.domainId)),
+      )
+      .get();
     await dispatchExpiry(
       db,
       `domain:${domain.id}`,
       "cert",
       domain.hostname,
       input.certDaysRemaining,
+      check?.notAfter,
     );
     await dispatchExpiry(
       db,
@@ -481,6 +489,7 @@ export async function processCheckAlert(
       "domain",
       domain.hostname,
       input.domainDaysRemaining,
+      check?.domainExpiresAt,
     );
     return { cert: null, domain: null };
   }

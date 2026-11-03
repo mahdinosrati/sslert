@@ -133,6 +133,10 @@ export const users = sqliteTable("users", {
     .$type<"local" | "ldap">()
     .notNull()
     .default("local"),
+  email: text("email").notNull().default(""),
+  mobile: text("mobile").notNull().default(""),
+  telegramId: text("telegram_id").notNull().default(""),
+  notificationChannels: text("notification_channels").notNull().default("[]"),
   ldapId: text("ldap_id").unique(),
   ldapCheckedAt: text("ldap_checked_at"),
   canCreate: integer("can_create", { mode: "boolean" })
@@ -216,10 +220,27 @@ export const notificationPolicies = sqliteTable("notification_policies", {
   key: text("key").primaryKey(),
   mode: text("mode").notNull().default("inherit"),
   connectionIds: text("connection_ids").notNull().default("[]"),
-  thresholds: text("thresholds").notNull().default("[30,7,1,0]"),
+  recipients: text("recipients").notNull().default("[]"),
+  scheduleMode: text("schedule_mode").notNull().default("milestones"),
+  thresholds: text("thresholds")
+    .notNull()
+    .default("[30,20,10,7,6,5,4,3,2,1,0]"),
   repeatHours: integer("repeat_hours").notNull().default(24),
 });
+export const notificationStages = sqliteTable("notification_stages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  targetKey: text("target_key").notNull(),
+  source: text("source").notNull(),
+  channel: text("channel").notNull(),
+  recipient: text("recipient").notNull(),
+  expiryCycle: text("expiry_cycle").notNull(),
+  stage: integer("stage").notNull(),
+  status: text("status").notNull(),
+  attemptedAt: text("attempted_at").notNull(),
+});
 export const deliveries = sqliteTable("deliveries", {
+  recipient: text("recipient").notNull().default(""),
+  expiryCycle: text("expiry_cycle").notNull().default(""),
   id: integer("id").primaryKey({ autoIncrement: true }),
   targetKey: text("target_key").notNull(),
   source: text("source").notNull(),

@@ -10,6 +10,7 @@ import type { DB } from "../db/index.js";
 import type { AuthEnv, RequestActor } from "../middleware/auth.js";
 import {
   connections,
+  users,
   notificationPolicies,
   deliveries,
   domains,
@@ -22,6 +23,7 @@ import {
 } from "../middleware/permissions.js";
 import {
   resolvedPolicy,
+  notificationTargets,
   readPolicy,
   sendConnection,
 } from "../services/notifications.js";
@@ -32,13 +34,25 @@ const policySchema = z
     mode: z.enum(["inherit", "custom", "disabled"]),
     connectionIds: z.array(z.number().int().positive()).max(50),
     thresholds: z.array(z.number().int().min(0).max(3650)).min(1).max(20),
+    recipients: z
+      .array(
+        z
+          .object({
+            userId: z.number().int().positive(),
+            connectionId: z.number().int().positive(),
+          })
+          .strict(),
+      )
+      .max(500)
+      .optional(),
+    scheduleMode: z.enum(["milestones", "repeat"]).optional(),
     repeatHours: z.number().int().min(1).max(8760),
   })
   .strict();
 const connectionSchema = z
   .object({
     name: z.string().trim().min(1).max(100),
-    channel: z.enum(["email", "telegram", "webhook", "slack", "ntfy"]),
+    channel: z.enum(["email", "telegram", "webhook", "slack", "ntfy", "sms"]),
     enabled: z.boolean(),
     shared: z.boolean(),
     config: channelConfigSchema,
@@ -82,6 +96,36 @@ export function createNotificationsRouter(db: DB) {
       resourceType: "notification",
       resourceId: id,
     });
+  app.get("/recipients/:id", (c) => {
+    if (c.get("actor")!.role !== "admin")
+      return c.json({ error: "Administrator access required" }, 403);
+    const id = Number(c.req.param("id"));
+    if (!db.select().from(users).where(eq(users.id, id)).get())
+      return c.json({ error: "Not found" }, 404);
+    const targets = [
+      ...db
+        .select()
+        .from(domains)
+        .all()
+        .map((r) => ({ key: "domain:" + r.id, name: r.hostname })),
+      ...db
+        .select()
+        .from(resources)
+        .all()
+        .map((r) => ({ key: "resource:" + r.id, name: r.title })),
+    ];
+    return c.json({
+      targets: targets.map((r) => ({
+        ...r,
+        inherited: readPolicy(db, r.key).mode === "inherit",
+        subscribed:
+          resolvedPolicy(db, r.key).mode !== "disabled" &&
+          resolvedPolicy(db, r.key).recipients.some(
+            (route) => route.userId === id,
+          ),
+      })),
+    });
+  });
   app.get("/coverage", (c) => {
     const actor = c.get("actor")!;
     const ready = new Set(
@@ -122,7 +166,9 @@ export function createNotificationsRouter(db: DB) {
           return [
             key,
             policy.mode !== "disabled" &&
-              policy.connectionIds.some((id) => ready.has(id)),
+              notificationTargets(db, key).some((target) =>
+                ready.has(target.connection.id),
+              ),
           ];
         }),
       ),
@@ -157,6 +203,7 @@ export function createNotificationsRouter(db: DB) {
         if (!input.success)
           return c.json({ error: "Invalid connection settings" }, 400);
         const data = input.data;
+        if (data.channel === "sms") data.enabled = false;
         if (method === "put") {
           const old = db
             .select()
@@ -166,11 +213,18 @@ export function createNotificationsRouter(db: DB) {
           if (!old) return c.json({ error: "Not found" }, 404);
           const previous = JSON.parse(old.config);
           if (old.channel === data.channel)
-            for (const field of ["smtpPassword", "resendApiKey"] as const) {
+            for (const field of [
+              "smtpPassword",
+              "resendApiKey",
+              "smsAuthToken",
+            ] as const) {
               const needed =
-                field === "smtpPassword"
-                  ? data.config.emailProvider === "smtp" && data.config.smtpAuth
-                  : data.config.emailProvider !== "smtp";
+                field === "smsAuthToken"
+                  ? data.channel === "sms"
+                  : field === "smtpPassword"
+                    ? data.config.emailProvider === "smtp" &&
+                      data.config.smtpAuth
+                    : data.config.emailProvider !== "smtp";
               if (
                 needed &&
                 data.config[field] === undefined &&
@@ -238,6 +292,14 @@ export function createNotificationsRouter(db: DB) {
       for (const p of tx.select().from(notificationPolicies).all())
         tx.update(notificationPolicies)
           .set({
+            recipients: JSON.stringify(
+              (
+                JSON.parse(p.recipients) as {
+                  userId: number;
+                  connectionId: number;
+                }[]
+              ).filter((r) => r.connectionId !== id),
+            ),
             connectionIds: JSON.stringify(
               (JSON.parse(p.connectionIds) as number[]).filter((n) => n !== id),
             ),
@@ -253,6 +315,13 @@ export function createNotificationsRouter(db: DB) {
       (r) => r.id === Number(c.req.param("id")),
     );
     if (!row) return c.json({ error: "Not found" }, 404);
+    if (row.channel === "sms")
+      return c.json(
+        {
+          error: "SMS is a draft until template and test details are verified",
+        },
+        409,
+      );
     const result = await sendConnection(
       db,
       row,
@@ -287,7 +356,13 @@ export function createNotificationsRouter(db: DB) {
       (!canAccessTarget(db, c.get("actor"), key) || !exists(key))
     )
       return c.json({ error: "Not found" }, 404);
-    return c.json({ policy: readPolicy(db, key) });
+    const policy = readPolicy(db, key);
+    return c.json({
+      policy:
+        c.get("actor")!.role === "admin"
+          ? policy
+          : { ...policy, recipients: [] },
+    });
   });
   app.put("/policies/:key", async (c) => {
     const key = c.req.param("key"),
@@ -302,12 +377,39 @@ export function createNotificationsRouter(db: DB) {
     if (!parsed.success || (key === "global" && parsed.data.mode === "inherit"))
       return c.json({ error: "Invalid notification policy" }, 400);
     const data = parsed.data;
+    const previous = readPolicy(db, key);
+    if (actor.role !== "admin" && data.recipients?.length)
+      return c.json({ error: "Administrator access required" }, 403);
+    const recipients =
+      actor.role === "admin"
+        ? (data.recipients ?? previous.recipients)
+        : previous.recipients;
+    for (const route of recipients) {
+      const user = db
+        .select()
+        .from(users)
+        .where(eq(users.id, route.userId))
+        .get();
+      const connection = db
+        .select()
+        .from(connections)
+        .where(eq(connections.id, route.connectionId))
+        .get();
+      if (
+        !user ||
+        !connection ||
+        !["email", "telegram", "sms"].includes(connection.channel)
+      )
+        return c.json({ error: "Invalid notification recipient" }, 400);
+    }
     const ids = new Set(allowed(actor).map((r) => r.id));
     if (data.connectionIds.some((id) => !ids.has(id)))
       return c.json({ error: "Connection is unavailable" }, 403);
     const values = {
       key,
       ...data,
+      recipients: JSON.stringify(recipients),
+      scheduleMode: data.scheduleMode ?? previous.scheduleMode,
       connectionIds: JSON.stringify([...new Set(data.connectionIds)]),
       thresholds: JSON.stringify(
         [...new Set(data.thresholds)].sort((a, b) => b - a),
@@ -334,7 +436,7 @@ export function createNotificationsRouter(db: DB) {
     )
       return c.json({ error: "Invalid history filter" }, 400);
     const scope =
-      (a.role === "admin" || a.authSource === "ldap")
+      a.role === "admin" || a.authSource === "ldap"
         ? undefined
         : or(
             sql`${deliveries.targetKey} IN (SELECT 'domain:' || domain_id FROM user_domains WHERE user_id = ${a.userId})`,
@@ -375,6 +477,7 @@ export function createNotificationsRouter(db: DB) {
           : undefined;
         return {
           ...r,
+          recipient: a.role === "admin" ? r.recipient : undefined,
           targetName,
           connectionName: connection?.name,
           channel: connection?.channel,

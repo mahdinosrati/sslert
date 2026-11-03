@@ -1,5 +1,5 @@
 import { createServer, type Server, type TlsOptions } from "node:tls";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { writeFileSync, mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,48 +33,106 @@ function makeCert(daysValid: number): { cert: string; key: string } {
   const serialPath = join(dir, "serial");
   const confPath = join(dir, "openssl.cnf");
 
-  writeFileSync(confPath, [
-    "[ ca ]",
-    "default_ca = CA_default",
-    "[ CA_default ]",
-    `dir = ${dir}`,
-    `database = ${indexPath}`,
-    `serial = ${serialPath}`,
-    `new_certs_dir = ${dir}`,
-    `certificate = ${caCertPath}`,
-    `private_key = ${caKeyPath}`,
-    "default_md = sha256",
-    "policy = policy_any",
-    "[ policy_any ]",
-    "commonName = supplied",
-    "",
-  ].join("\n"));
+  writeFileSync(
+    confPath,
+    [
+      "[ ca ]",
+      "default_ca = CA_default",
+      "[ CA_default ]",
+      `dir = ${dir.replaceAll("\\", "/")}`,
+      `database = ${indexPath.replaceAll("\\", "/")}`,
+      `serial = ${serialPath.replaceAll("\\", "/")}`,
+      `new_certs_dir = ${dir.replaceAll("\\", "/")}`,
+      `certificate = ${caCertPath.replaceAll("\\", "/")}`,
+      `private_key = ${caKeyPath.replaceAll("\\", "/")}`,
+      "default_md = sha256",
+      "policy = policy_any",
+      "[ policy_any ]",
+      "commonName = supplied",
+      "",
+    ].join("\n"),
+  );
   writeFileSync(indexPath, "");
   writeFileSync(serialPath, "01\n");
 
-  execSync(`openssl genrsa -out ${caKeyPath} 2048`, { stdio: "ignore" });
-  execSync(
-    `openssl req -x509 -new -key ${caKeyPath} -out ${caCertPath} -days 3650 -subj "/CN=TestCA" -nodes`,
-    { stdio: "ignore" }
+  execFileSync("openssl", ["genrsa", "-out", caKeyPath, "2048"], {
+    stdio: "ignore",
+  });
+  execFileSync(
+    "openssl",
+    [
+      "req",
+      "-x509",
+      "-new",
+      "-key",
+      caKeyPath,
+      "-out",
+      caCertPath,
+      "-days",
+      "3650",
+      "-subj",
+      "/CN=TestCA",
+      "-nodes",
+    ],
+    { stdio: "ignore" },
   );
 
   if (daysValid >= 0) {
-    execSync(
-      `openssl req -x509 -newkey rsa:2048 -keyout ${leafKeyPath} -out ${leafCertPath} -days ${daysValid === 0 ? 1 : daysValid} -nodes -subj "/CN=localhost"`,
-      { stdio: "ignore" }
+    execFileSync(
+      "openssl",
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-keyout",
+        leafKeyPath,
+        "-out",
+        leafCertPath,
+        "-days",
+        String(daysValid === 0 ? 1 : daysValid),
+        "-nodes",
+        "-subj",
+        "/CN=localhost",
+      ],
+      { stdio: "ignore" },
     );
   } else {
-    execSync(`openssl genrsa -out ${leafKeyPath} 2048`, { stdio: "ignore" });
-    execSync(
-      `openssl req -new -key ${leafKeyPath} -subj "/CN=localhost" -out ${csrPath}`,
-      { stdio: "ignore" }
+    execFileSync("openssl", ["genrsa", "-out", leafKeyPath, "2048"], {
+      stdio: "ignore",
+    });
+    execFileSync(
+      "openssl",
+      [
+        "req",
+        "-new",
+        "-key",
+        leafKeyPath,
+        "-subj",
+        "/CN=localhost",
+        "-out",
+        csrPath,
+      ],
+      { stdio: "ignore" },
     );
     const endDate = formatAsn1Date(
-      new Date(Date.now() - 86400_000 * Math.min(2, Math.abs(daysValid)))
+      new Date(Date.now() - 86400_000 * Math.min(2, Math.abs(daysValid))),
     );
-    execSync(
-      `openssl ca -config ${confPath} -in ${csrPath} -out ${leafCertPath} -enddate ${endDate} -batch`,
-      { stdio: "ignore" }
+    execFileSync(
+      "openssl",
+      [
+        "ca",
+        "-config",
+        confPath,
+        "-in",
+        csrPath,
+        "-out",
+        leafCertPath,
+        "-enddate",
+        endDate,
+        "-batch",
+      ],
+      { stdio: "ignore" },
     );
   }
 
@@ -95,7 +153,7 @@ export async function startTlsTestServer(opts: {
     socket.end();
   });
   await new Promise<void>((resolve) =>
-    server.listen(opts.port ?? 0, "127.0.0.1", resolve)
+    server.listen(opts.port ?? 0, "127.0.0.1", resolve),
   );
   const addr = server.address();
   if (!addr || typeof addr === "string") {
@@ -105,7 +163,7 @@ export async function startTlsTestServer(opts: {
     port: addr.port,
     close: () =>
       new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve()))
+        server.close((err) => (err ? reject(err) : resolve())),
       ),
   };
 }

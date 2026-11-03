@@ -2,7 +2,12 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getDatabasePath } from "../db/index.js";
-const fields = ["smtpPassword", "resendApiKey", "ldapBindPassword"];
+const fields = [
+  "smtpPassword",
+  "resendApiKey",
+  "ldapBindPassword",
+  "smsAuthToken",
+];
 function key(create = false) {
   const path = join(dirname(getDatabasePath()), "notification.key");
   mkdirSync(dirname(path), { recursive: true });
@@ -56,7 +61,7 @@ export function openConfig(config: Record<string, any>) {
 export function publicConfig(config: Record<string, any>) {
   const result = { ...config };
   for (const field of fields) {
-    if(field !== "ldapBindPassword") result[field + "Set"] = !!result[field];
+    if (field !== "ldapBindPassword") result[field + "Set"] = !!result[field];
     delete result[field];
   }
   return result;

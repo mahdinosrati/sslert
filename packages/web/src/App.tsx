@@ -192,7 +192,7 @@ export default function App() {
       </main>
       {!login && (
         <footer className="py-6 text-center text-xs text-slate-500">
-          {t("Bamdad Alert")} · 1.0.7
+          {t("Bamdad Alert")} · 1.0.8
         </footer>
       )}
       {user && !user.mustChangePassword && permits(user, "canCreate") && (

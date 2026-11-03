@@ -1,3 +1,4 @@
+import { UserNotifications } from "../components/UserNotifications";
 import { LdapSettings } from "../components/LdapSettings";
 import { useAuth } from "../lib/auth";
 import { useState } from "react";
@@ -114,6 +115,9 @@ export function Users() {
           </section>
         ))}
       </div>
+      {editing?.id ? (
+        <UserNotifications key={editing.id} userId={editing.id} />
+      ) : null}
       {editing && (
         <section className="panel">
           <form
@@ -127,6 +131,10 @@ export function Users() {
                   ...(!editing.id ? { username: editing.username } : {}),
                   ...(editing.password ? { password: editing.password } : {}),
                   role: editing.role,
+                  email: editing.email || "",
+                  mobile: editing.mobile || "",
+                  telegramId: editing.telegramId || "",
+                  notificationChannels: editing.notificationChannels || [],
                   canCreate: editing.canCreate,
                   canEdit: editing.canEdit,
                   canTest: editing.canTest,
@@ -151,6 +159,54 @@ export function Users() {
               }
             }}
           >
+            <fieldset className="space-y-3">
+              <legend>{t("Notification contact details")}</legend>
+              {(["email", "mobile", "telegramId"] as const).map((field) => (
+                <label key={field}>
+                  {t(
+                    field === "email"
+                      ? "Email"
+                      : field === "mobile"
+                        ? "Mobile number"
+                        : "Telegram chat ID",
+                  )}
+                  <input
+                    dir="ltr"
+                    type={field === "email" ? "email" : "text"}
+                    value={editing[field] || ""}
+                    onChange={(e) =>
+                      setEditing({ ...editing, [field]: e.target.value })
+                    }
+                  />
+                </label>
+              ))}
+              {["email", "sms", "telegram"].map((channel) => (
+                <label className="check-label" key={channel}>
+                  <input
+                    type="checkbox"
+                    checked={(editing.notificationChannels || []).includes(
+                      channel,
+                    )}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        notificationChannels: e.target.checked
+                          ? [...(editing.notificationChannels || []), channel]
+                          : (editing.notificationChannels || []).filter(
+                              (c) => c !== channel,
+                            ),
+                      })
+                    }
+                  />
+                  {t(channel)}
+                </label>
+              ))}
+              <p className="text-sm text-slate-500">
+                {t(
+                  "Receiving alerts is independent of viewing records. Disabled users receive no user-targeted alerts.",
+                )}
+              </p>
+            </fieldset>
             <label>
               {t("Username")}
               <input
@@ -229,7 +285,9 @@ export function Users() {
               <>
                 <p className="text-sm text-slate-500">
                   {t(
-                    editing.authSource === "ldap" ? "LDAP users can view all records. Additional permissions apply to all records." : "Users can view assigned items. Grant additional permissions below.",
+                    editing.authSource === "ldap"
+                      ? "LDAP users can view all records. Additional permissions apply to all records."
+                      : "Users can view assigned items. Grant additional permissions below.",
                   )}
                 </p>
                 {(["canCreate", "canEdit", "canTest"] as const).map((f) => (
@@ -244,7 +302,10 @@ export function Users() {
                     {t(
                       {
                         canCreate: "Create items",
-                        canEdit: editing.authSource === "ldap" ? "Edit all records" : "Edit assigned items",
+                        canEdit:
+                          editing.authSource === "ldap"
+                            ? "Edit all records"
+                            : "Edit assigned items",
                         canTest: "Send test notifications",
                       }[f],
                     )}
@@ -355,7 +416,7 @@ export function Settings() {
             <input
               type="number"
               required
-              min={1024}
+              min={1}
               max={65535}
               value={port || query.data?.desiredPort || 5173}
               onChange={(e) => setPort(e.target.value)}

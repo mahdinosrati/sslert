@@ -31,6 +31,17 @@ const channelNameSchema = z.enum([
 // SSLert instance. Min length 16, max 256.
 export const channelConfigSchema = z
   .object({
+    smsUrl: z.string().url().max(2048).optional(),
+    smsBodyId: z.number().int().positive().optional(),
+    smsVariables: z
+      .array(z.enum(["title", "days", "source", "expiry"]))
+      .max(20)
+      .optional(),
+    smsTestNumber: z
+      .string()
+      .regex(/^\+?[0-9]{7,15}$/)
+      .optional(),
+    smsAuthToken: z.string().max(4096).optional(),
     emailProvider: z.enum(["smtp", "resend"]).optional(),
     senderName: z.string().max(100).optional(),
     smtpHost: z
@@ -76,9 +87,22 @@ const updateSchema = z.object({
  * `Webhook error: invalid URL` from the sender). Closes H-1.
  */
 export async function validateChannelConfig(
-  channel: "email" | "webhook" | "telegram" | "slack" | "ntfy",
+  channel: "email" | "webhook" | "telegram" | "slack" | "ntfy" | "sms",
   config: Record<string, unknown>,
 ): Promise<string | null> {
+  if (channel === "sms") {
+    if (config.smsUrl) {
+      const url = new URL(String(config.smsUrl));
+      if (
+        !["http:", "https:"].includes(url.protocol) ||
+        url.username ||
+        url.password ||
+        url.hash
+      )
+        return "Invalid SMS URL";
+    }
+    return null; // Draft only: this endpoint cannot be called by a sender yet.
+  }
   if (channel === "email" && config.emailProvider === "smtp") {
     if (
       !config.smtpHost ||

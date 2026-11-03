@@ -18,7 +18,7 @@ Base path `/api`; JSON requests. Read the generated `/api/openapi.json` or `/api
 | GET, PUT /notifications/policies/:key | key global, domain:ID, resource:ID; mode inherit/custom/disabled, connectionIds, thresholds, repeatHours |
 | GET /notifications/history | Recent deliveries scoped to assigned items; administrator sees all |
 | GET /settings | Requested port and manual server command |
-| PUT /settings/port | Administrator `{port:1024..65535}`; does not change running host port |
+| PUT /settings/port | Administrator `{port:1..65535}`; does not change running host port |
 
 Users cannot read connection secrets or modify global/default connection definitions. Test requires canTest; create requires canCreate; item/policy edits require canEdit. Assignment is checked independently of capability. DELETE, accounts, settings and audit log require administrator.
 
@@ -27,3 +27,11 @@ Users cannot read connection secrets or modify global/default connection definit
 Test statuses: sent, logged, failed (502), deduped (429). Logged means no actual email was delivered because the server has no Resend key. Provider error text is not exposed. Real deliveries and test deliveries have separate deduplication windows.
 
 Legacy domain channel write endpoints return 410 after central migration; use connections and policies. Monitored API records contain dates, not bearer tokens.
+
+## 1.0.8 additions
+
+Policies support `scheduleMode: "milestones" | "repeat"` and administrator-managed `recipients: [{userId, connectionId}]`. Defaults are milestones at `[30,20,10,7,6,5,4,3,2,1,0]`. Inheritance replaces the entire policy. GET policy redacts user routes for non-administrators.
+
+User create/update accepts optional `email`, `mobile`, `telegramId` and `notificationChannels: ["email", "sms", "telegram"]`. GET `/notifications/recipients/:id` is administrator-only and lists record subscriptions. History exposes `recipient` only to administrators and adds `expiryCycle`.
+
+Connections accept channel `sms` with optional `smsUrl`, `smsBodyId`, `smsVariables`, `smsTestNumber`, `smsAuthToken`. These are disabled drafts; POST test returns 409 without sending. Tokens are encrypted and redacted.

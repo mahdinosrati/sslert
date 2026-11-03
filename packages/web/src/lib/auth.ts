@@ -4,6 +4,10 @@ export interface User {
   id: number;
   authSource?: "local" | "ldap";
   username: string;
+  email?: string;
+  mobile?: string;
+  telegramId?: string;
+  notificationChannels?: string[];
   role: "admin" | "user";
   enabled: boolean;
   mustChangePassword: boolean;

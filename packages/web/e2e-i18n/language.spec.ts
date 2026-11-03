@@ -97,7 +97,9 @@ test.beforeEach(async ({ page }) => {
     global: {
       mode: "custom",
       connectionIds: [1, 2],
-      thresholds: [30, 7, 1, 0],
+      thresholds: [30, 20, 10, 7, 6, 5, 4, 3, 2, 1, 0],
+      scheduleMode: "milestones",
+      recipients: [],
       repeatHours: 24,
     },
   };
@@ -184,7 +186,9 @@ test.beforeEach(async ({ page }) => {
         policy: policies[key] || {
           mode: "inherit",
           connectionIds: [],
-          thresholds: [30, 7, 1, 0],
+          thresholds: [30, 20, 10, 7, 6, 5, 4, 3, 2, 1, 0],
+          scheduleMode: "milestones",
+          recipients: [],
           repeatHours: 24,
         },
       };
@@ -201,6 +205,17 @@ test.beforeEach(async ({ page }) => {
             status: "sent",
             createdAt: check.checkedAt,
             isTest: false,
+          },
+        ],
+      };
+    else if (path.startsWith("/api/notifications/recipients/"))
+      body = {
+        targets: [
+          {
+            key: "domain:1",
+            name: "example.com",
+            inherited: true,
+            subscribed: false,
           },
         ],
       };
@@ -419,11 +434,19 @@ test("documentation screenshots in light and dark themes", async ({
     ]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
-      if(path === "/settings") {
-        await page.getByLabel("استفاده از یک گروه مجاز LDAP",{exact:true}).check();
-        await page.getByRole("combobox",{name:"امنیت اتصال",exact:true}).selectOption("ldap");
-        await page.getByLabel("سرور دایرکتوری",{exact:true}).fill("dc.example.org");
-        await page.getByLabel("DN گروه مجاز LDAP",{exact:true}).fill("CN=PanelUsers,OU=Groups,DC=example,DC=org");
+      if (path === "/settings") {
+        await page
+          .getByLabel("استفاده از یک گروه مجاز LDAP", { exact: true })
+          .check();
+        await page
+          .getByRole("combobox", { name: "امنیت اتصال", exact: true })
+          .selectOption("ldap");
+        await page
+          .getByLabel("سرور دایرکتوری", { exact: true })
+          .fill("dc.example.org");
+        await page
+          .getByLabel("DN گروه مجاز LDAP", { exact: true })
+          .fill("CN=PanelUsers,OU=Groups,DC=example,DC=org");
       }
       await page.evaluate(() => document.fonts.ready);
       await page.screenshot({
@@ -432,23 +455,45 @@ test("documentation screenshots in light and dark themes", async ({
       });
     }
     await page.goto("/resources");
-    await page.getByRole("button", { name: "افزودن مورد", exact: true }).click();
-    await page.getByRole("combobox", { name: "نوع", exact: true }).selectOption("contract");
-    await page.getByLabel("عنوان", { exact: true }).fill("قرارداد پشتیبانی سامانه‌ها");
+    await page
+      .getByRole("button", { name: "افزودن مورد", exact: true })
+      .click();
+    await page
+      .getByRole("combobox", { name: "نوع", exact: true })
+      .selectOption("contract");
+    await page
+      .getByLabel("عنوان", { exact: true })
+      .fill("قرارداد پشتیبانی سامانه‌ها");
     await page.getByLabel("شماره قرارداد", { exact: true }).fill("CT-105");
-    await page.getByLabel("تاریخ شروع (شمسی)", { exact: true }).fill("1405/01/01");
-    await page.getByLabel("تاریخ پایان اعتبار (شمسی)", { exact: true }).fill("1405/12/29");
-    await page.getByRole("button", { name: /انتخاب تاریخ.*تاریخ پایان/ }).click();
-    await page.screenshot({path: resolve(folder, `contract-calendar${theme === "dark" ? "-dark" : ""}.png`), fullPage:true});
+    await page
+      .getByLabel("تاریخ شروع (شمسی)", { exact: true })
+      .fill("1405/01/01");
+    await page
+      .getByLabel("تاریخ پایان اعتبار (شمسی)", { exact: true })
+      .fill("1405/12/29");
+    await page
+      .getByRole("button", { name: /انتخاب تاریخ.*تاریخ پایان/ })
+      .click();
+    await page.screenshot({
+      path: resolve(
+        folder,
+        `contract-calendar${theme === "dark" ? "-dark" : ""}.png`,
+      ),
+      fullPage: true,
+    });
     await page.goto("/notifications");
     await page
       .getByRole("button", { name: "افزودن ارتباط", exact: true })
       .click();
     await page.getByLabel("روش ارسال ایمیل").selectOption("smtp");
     await page.getByLabel("سرور SMTP").fill("mail.example.org");
-    await page.getByLabel("پورت SMTP",{exact:true}).fill("465");
-    await page.getByRole("combobox",{name:"امنیت اتصال",exact:true}).selectOption("tls");
-    await page.getByLabel("ایمیل فرستنده",{exact:true}).fill("panel@example.org");
+    await page.getByLabel("پورت SMTP", { exact: true }).fill("465");
+    await page
+      .getByRole("combobox", { name: "امنیت اتصال", exact: true })
+      .selectOption("tls");
+    await page
+      .getByLabel("ایمیل فرستنده", { exact: true })
+      .fill("panel@example.org");
     await page
       .getByLabel("ایمیل‌های گیرنده", { exact: true })
       .fill("operations@example.com\nadmin@example.com");
@@ -735,9 +780,7 @@ test("Jalali calendar picks dates and blocks invalid Esfand days", async ({
     page.getByLabel("Expiry date (Gregorian, UTC)", { exact: true }),
   ).toHaveValue("2026-11-01");
 });
-test("LDAP login selector and administration form", async ({
-  page,
-}) => {
+test("LDAP login selector and administration form", async ({ page }) => {
   await page.goto("/login");
   await page
     .getByRole("combobox", { name: "Sign-in method", exact: true })
@@ -775,38 +818,265 @@ test("LDAP login selector and administration form", async ({
   ).toBeVisible();
 });
 
-test("plain LDAP is explicit and administrator-only mode hides the user group", async ({page})=>{
- await login(page); await page.goto("/settings");
- await page.getByRole("combobox",{name:"Connection security",exact:true}).selectOption("ldap");
- await expect(page.getByLabel("Directory port",{exact:true})).toHaveValue("389");
- await expect(page.getByRole("note")).toContainText("without transport encryption");
- await page.getByLabel("Use one allowed LDAP group",{exact:true}).check();
- await expect(page.getByLabel("Allowed user group DN",{exact:true})).toHaveCount(0);
- await page.getByLabel("Allowed LDAP group DN",{exact:true}).fill("CN=PanelAdmins,DC=example,DC=org");
- const sent=page.waitForRequest(r=>r.url().endsWith("/api/settings/ldap/save"));
- await page.getByRole("button",{name:"Save directory settings",exact:true}).click();
- expect((await sent).postDataJSON().settings).toMatchObject({security:"ldap",port:389,adminOnly:true});
+test("plain LDAP is explicit and administrator-only mode hides the user group", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/settings");
+  await page
+    .getByRole("combobox", { name: "Connection security", exact: true })
+    .selectOption("ldap");
+  await expect(page.getByLabel("Directory port", { exact: true })).toHaveValue(
+    "389",
+  );
+  await expect(page.getByRole("note")).toContainText(
+    "without transport encryption",
+  );
+  await page.getByLabel("Use one allowed LDAP group", { exact: true }).check();
+  await expect(
+    page.getByLabel("Allowed user group DN", { exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByLabel("Allowed LDAP group DN", { exact: true })
+    .fill("CN=PanelAdmins,DC=example,DC=org");
+  const sent = page.waitForRequest((r) =>
+    r.url().endsWith("/api/settings/ldap/save"),
+  );
+  await page
+    .getByRole("button", { name: "Save directory settings", exact: true })
+    .click();
+  expect((await sent).postDataJSON().settings).toMatchObject({
+    security: "ldap",
+    port: 389,
+    adminOnly: true,
+  });
 });
 
-test("administrator can grant roles and edits to LDAP users from the panel",async({page})=>{
- await login(page);
- await page.route("**/api/users",r=>r.fulfill({json:{users:[{id:2,username:"ad:alice",authSource:"ldap",role:"user",enabled:true,canCreate:false,canEdit:false,canTest:false,domainIds:[],resourceIds:[]}]}}));
- await page.route("**/api/users/2",r=>r.fulfill({json:{ok:true}}));
- await page.goto("/users");await page.getByRole("button",{name:"Edit",exact:true}).click();
- await expect(page.getByRole("combobox",{name:"Role",exact:true})).toBeEnabled();
- await expect(page.getByText("LDAP users can view all records. Additional permissions apply to all records.",{exact:true})).toBeVisible();
- await page.getByLabel("Edit all records",{exact:true}).check();
- const sent=page.waitForRequest(r=>r.method()==="PATCH"&&r.url().endsWith("/api/users/2"));
- await page.getByRole("button",{name:"Save",exact:true}).click();
- expect((await sent).postDataJSON()).toMatchObject({role:"user",canEdit:true});
+test("administrator can grant roles and edits to LDAP users from the panel", async ({
+  page,
+}) => {
+  await login(page);
+  await page.route("**/api/users", (r) =>
+    r.fulfill({
+      json: {
+        users: [
+          {
+            id: 2,
+            username: "ad:alice",
+            authSource: "ldap",
+            role: "user",
+            enabled: true,
+            canCreate: false,
+            canEdit: false,
+            canTest: false,
+            domainIds: [],
+            resourceIds: [],
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/users/2", (r) => r.fulfill({ json: { ok: true } }));
+  await page.goto("/users");
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Role", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByText(
+      "LDAP users can view all records. Additional permissions apply to all records.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await page.getByLabel("Edit all records", { exact: true }).check();
+  const sent = page.waitForRequest(
+    (r) => r.method() === "PATCH" && r.url().endsWith("/api/users/2"),
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  expect((await sent).postDataJSON()).toMatchObject({
+    role: "user",
+    canEdit: true,
+  });
 });
 
-test("LDAP permission documentation screenshots",async({page},info)=>{
- await login(page);
- await page.route("**/api/users",r=>r.fulfill({json:{users:[{id:2,username:"ad:operator",authSource:"ldap",role:"user",enabled:true,canCreate:false,canEdit:false,canTest:false,domainIds:[],resourceIds:[]}]}}));
- await page.goto("/users");await page.getByRole("button",{name:"Edit",exact:true}).click();
- await page.getByLabel("Language",{exact:true}).selectOption("fa");
- await page.setViewportSize({width:1440,height:1000});
- const folder=process.env.SSLERT_DOC_SCREENSHOTS==="1"?fileURLToPath(new URL("../../../docs/images/fa",import.meta.url)):info.outputPath("docs");await mkdir(folder,{recursive:true});
- for(const theme of ["light","dark"]){await page.getByLabel("ظاهر",{exact:true}).selectOption(theme);await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:resolve(folder,`ldap-permissions${theme==="dark"?"-dark":""}.png`),fullPage:true});}
+test("LDAP permission documentation screenshots", async ({ page }, info) => {
+  await login(page);
+  await page.route("**/api/users", (r) =>
+    r.fulfill({
+      json: {
+        users: [
+          {
+            id: 2,
+            username: "ad:operator",
+            authSource: "ldap",
+            role: "user",
+            enabled: true,
+            canCreate: false,
+            canEdit: false,
+            canTest: false,
+            domainIds: [],
+            resourceIds: [],
+          },
+        ],
+      },
+    }),
+  );
+  await page.goto("/users");
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByLabel("Language", { exact: true }).selectOption("fa");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const folder =
+    process.env.SSLERT_DOC_SCREENSHOTS === "1"
+      ? fileURLToPath(new URL("../../../docs/images/fa", import.meta.url))
+      : info.outputPath("docs");
+  await mkdir(folder, { recursive: true });
+  for (const theme of ["light", "dark"]) {
+    await page.getByLabel("ظاهر", { exact: true }).selectOption(theme);
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({
+      path: resolve(
+        folder,
+        `ldap-permissions${theme === "dark" ? "-dark" : ""}.png`,
+      ),
+      fullPage: true,
+    });
+  }
+});
+
+test("user contacts and milestone recipients submit independently of access grants", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/users");
+  await page.getByRole("button", { name: "Edit", exact: true }).last().click();
+  await page.getByLabel("Email", { exact: true }).fill("operator@example.org");
+  await page.getByLabel("Mobile number", { exact: true }).fill("+989120000000");
+  await page.getByRole("checkbox", { name: "email", exact: true }).check();
+  const contact = page.waitForRequest(
+    (r) => r.method() === "PATCH" && r.url().includes("/api/users/"),
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  expect((await contact).postDataJSON()).toMatchObject({
+    email: "operator@example.org",
+    mobile: "+989120000000",
+    notificationChannels: ["email"],
+    canEdit: false,
+  });
+  await page.goto("/notifications");
+  await page
+    .getByRole("combobox", { name: "User", exact: true })
+    .selectOption("2");
+  await page
+    .getByRole("combobox", { name: "Connection", exact: true })
+    .selectOption("1");
+  await page
+    .getByRole("button", { name: "Add recipient", exact: true })
+    .click();
+  const policy = page.waitForRequest(
+    (r) => r.method() === "PUT" && r.url().endsWith("/policies/global"),
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  expect((await policy).postDataJSON()).toMatchObject({
+    recipients: [{ userId: 2, connectionId: 1 }],
+    scheduleMode: "milestones",
+    thresholds: [30, 20, 10, 7, 6, 5, 4, 3, 2, 1, 0],
+  });
+});
+test("SMS draft saves without sending or enabling the connection", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto("/notifications");
+  await page
+    .getByRole("button", { name: "Add connection", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Channel", exact: true })
+    .selectOption("sms");
+  await page.getByLabel("Name", { exact: true }).fill("SMS draft");
+  await page
+    .getByLabel("SMS API URL", { exact: true })
+    .fill("http://192.0.2.1:1111/api/sms/send-pattern");
+  await expect(
+    page.getByRole("checkbox", { name: "Enabled", exact: true }),
+  ).toBeDisabled();
+  const request = page.waitForRequest(
+    (r) => r.method() === "POST" && r.url().endsWith("/connections"),
+  );
+  await page
+    .locator("form")
+    .first()
+    .getByRole("button", { name: "Save", exact: true })
+    .click();
+  expect((await request).postDataJSON()).toMatchObject({
+    channel: "sms",
+    enabled: false,
+    config: { smsUrl: "http://192.0.2.1:1111/api/sms/send-pattern" },
+  });
+});
+test("1.0.8 documentation screenshots", async ({ page }, info) => {
+  const folder =
+    process.env.SSLERT_DOC_SCREENSHOTS === "1"
+      ? fileURLToPath(new URL("../../../docs/images/fa", import.meta.url))
+      : info.outputPath("docs");
+  await mkdir(folder, { recursive: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await login(page);
+  await page.getByLabel("Language", { exact: true }).selectOption("fa");
+  for (const theme of ["light", "dark"]) {
+    await page.getByLabel("ظاهر", { exact: true }).selectOption(theme);
+    await page.goto("/users");
+    await page
+      .getByRole("button", { name: "ویرایش", exact: true })
+      .last()
+      .click();
+    await page
+      .getByRole("textbox", { name: "ایمیل", exact: true })
+      .fill("operator@example.org");
+    await page
+      .getByLabel("شماره موبایل", { exact: true })
+      .fill("+989120000000");
+    await page.getByRole("checkbox", { name: "ایمیل", exact: true }).check();
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({
+      path: resolve(
+        folder,
+        `user-contacts${theme === "dark" ? "-dark" : ""}.png`,
+      ),
+      fullPage: true,
+    });
+    await page.goto("/notifications");
+    await page
+      .getByRole("combobox", { name: "کاربر", exact: true })
+      .selectOption("2");
+    await page
+      .getByRole("combobox", { name: "ارتباط", exact: true })
+      .selectOption("1");
+    await page
+      .getByRole("button", { name: "افزودن گیرنده", exact: true })
+      .click();
+    await page.screenshot({
+      path: resolve(
+        folder,
+        `notification-recipients${theme === "dark" ? "-dark" : ""}.png`,
+      ),
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "افزودن ارتباط", exact: true })
+      .click();
+    await page
+      .getByRole("combobox", { name: "کانال", exact: true })
+      .selectOption("sms");
+    await page
+      .getByLabel("نام", { exact: true })
+      .fill("پیامک سازمانی (پیش‌نویس)");
+    await page
+      .getByLabel("آدرس API پیامک", { exact: true })
+      .fill("http://192.0.2.1:1111/api/sms/send-pattern");
+    await page.screenshot({
+      path: resolve(folder, `sms-draft${theme === "dark" ? "-dark" : ""}.png`),
+      fullPage: true,
+    });
+  }
 });

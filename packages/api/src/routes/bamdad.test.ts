@@ -23,7 +23,14 @@ import { __resetRateLimiterForTests } from "../middleware/rate-limit.js";
 import { eq } from "drizzle-orm";
 const send = vi.hoisted(() =>
   vi.fn(
-    async (..._args: any[]): Promise<{ id?: string; partial?: boolean; error?: string; failureCode?: string }> => ({
+    async (
+      ..._args: any[]
+    ): Promise<{
+      id?: string;
+      partial?: boolean;
+      error?: string;
+      failureCode?: string;
+    }> => ({
       id: "sent-1",
     }),
   ),
@@ -43,6 +50,7 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
     runSqlMigrations(store.sqlite);
     await ensureInitialAdmin(store.db);
     initializeNotifications(store.db);
+    store.db.update(notificationPolicies).set({ scheduleMode: "repeat" }).run();
     app = createApp({ db: store.db });
     send.mockClear();
   });
@@ -334,7 +342,10 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
           .values({
             name: "C" + n,
             channel: "telegram",
-            config: JSON.stringify({ language: n === 1 ? "fa" : "en" }),
+            config: JSON.stringify({
+              language: n === 1 ? "fa" : "en",
+              chatId: String(n),
+            }),
           })
           .returning()
           .get()!.id,
@@ -353,6 +364,7 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
       .insert(notificationPolicies)
       .values({
         key: "resource:2",
+        scheduleMode: "repeat",
         mode: "custom",
         connectionIds: JSON.stringify([ids[1]]),
       })
@@ -367,23 +379,64 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
     await dispatchExpiry(store.db, "resource:2", "license", "License", 0);
     expect(send).toHaveBeenCalledTimes(3);
   });
-  it("retries failed delivery after fifteen minutes without waiting the seven-day repeat window",async()=>{
-    const conn=store.db.insert(connections).values({name:"SMTP",channel:"email",config:"{}"}).returning().get()!;
-    store.db.update(notificationPolicies).set({connectionIds:JSON.stringify([conn.id]),repeatHours:168}).where(eq(notificationPolicies.key,"global")).run();
-    send.mockResolvedValueOnce({error:"provider password must never appear",failureCode:"smtp_timeout"});
-    await dispatchExpiry(store.db,"domain:4","cert","example.org",10);
-    expect(store.db.select().from(deliveries).get()).toMatchObject({status:"failed",error:"SMTP connection timed out."});
-    await dispatchExpiry(store.db,"domain:4","cert","example.org",10);expect(send).toHaveBeenCalledTimes(1);
-    store.db.update(deliveries).set({createdAt:new Date(Date.now()-16*60_000).toISOString()}).run();
-    await Promise.all([dispatchExpiry(store.db,"domain:4","cert","example.org",10),dispatchExpiry(store.db,"domain:4","cert","example.org",10)]);
-    expect(send).toHaveBeenCalledTimes(2);expect(store.db.select().from(deliveries).all().map(x=>x.status)).toEqual(["failed","sent"]);
-    store.db.update(deliveries).set({createdAt:new Date(Date.now()-60*60_000).toISOString()}).where(eq(deliveries.status,"sent")).run();
-    await dispatchExpiry(store.db,"domain:4","cert","example.org",10);expect(send).toHaveBeenCalledTimes(2);
+  it("retries failed delivery after fifteen minutes without waiting the seven-day repeat window", async () => {
+    const conn = store.db
+      .insert(connections)
+      .values({
+        name: "SMTP",
+        channel: "email",
+        config: '{"to":"recipient@example.org"}',
+      })
+      .returning()
+      .get()!;
+    store.db
+      .update(notificationPolicies)
+      .set({ connectionIds: JSON.stringify([conn.id]), repeatHours: 168 })
+      .where(eq(notificationPolicies.key, "global"))
+      .run();
+    send.mockResolvedValueOnce({
+      error: "provider password must never appear",
+      failureCode: "smtp_timeout",
+    });
+    await dispatchExpiry(store.db, "domain:4", "cert", "example.org", 10);
+    expect(store.db.select().from(deliveries).get()).toMatchObject({
+      status: "failed",
+      error: "SMTP connection timed out.",
+    });
+    await dispatchExpiry(store.db, "domain:4", "cert", "example.org", 10);
+    expect(send).toHaveBeenCalledTimes(1);
+    store.db
+      .update(deliveries)
+      .set({ createdAt: new Date(Date.now() - 16 * 60_000).toISOString() })
+      .run();
+    await Promise.all([
+      dispatchExpiry(store.db, "domain:4", "cert", "example.org", 10),
+      dispatchExpiry(store.db, "domain:4", "cert", "example.org", 10),
+    ]);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(
+      store.db
+        .select()
+        .from(deliveries)
+        .all()
+        .map((x) => x.status),
+    ).toEqual(["failed", "sent"]);
+    store.db
+      .update(deliveries)
+      .set({ createdAt: new Date(Date.now() - 60 * 60_000).toISOString() })
+      .where(eq(deliveries.status, "sent"))
+      .run();
+    await dispatchExpiry(store.db, "domain:4", "cert", "example.org", 10);
+    expect(send).toHaveBeenCalledTimes(2);
   });
   it("checks API/license dates but skips perpetual and disabled records", async () => {
     const conn = store.db
       .insert(connections)
-      .values({ name: "Email", channel: "email", config: "{}" })
+      .values({
+        name: "Email",
+        channel: "email",
+        config: '{"to":"recipient@example.org"}',
+      })
       .returning()
       .get()!;
     store.db
@@ -425,7 +478,7 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
       .values({
         domainId: d.id,
         channel: "telegram",
-        config: '{"language":"fa"}',
+        config: '{"language":"fa","to":"recipient@example.org"}',
       })
       .run();
     initializeNotifications(store.db);
@@ -476,7 +529,11 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
     }
     const conn = store.db
       .insert(connections)
-      .values({ name: "Alerts", channel: "email", config: '{"language":"fa"}' })
+      .values({
+        name: "Alerts",
+        channel: "email",
+        config: '{"language":"fa","to":"recipient@example.org"}',
+      })
       .returning()
       .get()!;
     store.db
@@ -659,6 +716,7 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
         config: JSON.stringify({
           emailProvider: "smtp",
           smtpPassword: "secret",
+          to: "recipient@example.org",
         }),
       })
       .returning()
@@ -716,12 +774,18 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
       {},
       c,
     );
-    expect(send.mock.calls.at(-1)?.[1]).toMatchObject({
-      to: ["one@example.com", "two@example.com"],
-    });
-    expect(store.db.select().from(deliveries).all().at(-1)?.status).toBe(
-      "partial",
-    );
+    expect(send.mock.calls.slice(-2).map((call) => call[1].to)).toEqual([
+      "one@example.com",
+      "two@example.com",
+    ]);
+    expect(
+      store.db
+        .select()
+        .from(deliveries)
+        .all()
+        .slice(-2)
+        .map((row) => row.status),
+    ).toEqual(["partial", "sent"]);
     expect(
       (
         await req(
@@ -734,13 +798,235 @@ describe("Bamdad accounts, access, resources and notification policies", () => {
     ).toBe(400);
   });
 
- it("creates contracts, validates date ranges and dispatches contract alerts",async()=>{
-  const cookie=await admin();const body={kind:"contract",title:"Support contract",contractNumber:"CT-2026",provider:"Example partner",owner:"IT",validFrom:"2026-01-01",expiresAt:"2026-11-01"};
-  const response=await req("/resources","POST",body,cookie);expect(response.status).toBe(201);const record=(await response.json()).resource;expect(record).toMatchObject(body);
-  expect((await req("/resources","POST",{...body,validFrom:"2027-01-01"},cookie)).status).toBe(400);
-  expect((await req("/resources","POST",{...body,expiresAt:null},cookie)).status).toBe(400);
-  const conn=store.db.insert(connections).values({name:"Contract mail",channel:"email",config:JSON.stringify({to:"ops@example.com",language:"fa"})}).returning().get()!;
-  store.db.update(notificationPolicies).set({connectionIds:JSON.stringify([conn.id])}).where(eq(notificationPolicies.key,"global")).run();await dispatchExpiry(store.db,"resource:"+record.id,"contract",body.title,7);
-  expect(send.mock.calls.at(-1)?.[0]).toMatchObject({source:"contract"});expect(send.mock.calls.at(-1)?.[0].subject).toContain("قرارداد");
- });
+  it("creates contracts, validates date ranges and dispatches contract alerts", async () => {
+    const cookie = await admin();
+    const body = {
+      kind: "contract",
+      title: "Support contract",
+      contractNumber: "CT-2026",
+      provider: "Example partner",
+      owner: "IT",
+      validFrom: "2026-01-01",
+      expiresAt: "2026-11-01",
+    };
+    const response = await req("/resources", "POST", body, cookie);
+    expect(response.status).toBe(201);
+    const record = (await response.json()).resource;
+    expect(record).toMatchObject(body);
+    expect(
+      (
+        await req(
+          "/resources",
+          "POST",
+          { ...body, validFrom: "2027-01-01" },
+          cookie,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (await req("/resources", "POST", { ...body, expiresAt: null }, cookie))
+        .status,
+    ).toBe(400);
+    const conn = store.db
+      .insert(connections)
+      .values({
+        name: "Contract mail",
+        channel: "email",
+        config: JSON.stringify({ to: "ops@example.com", language: "fa" }),
+      })
+      .returning()
+      .get()!;
+    store.db
+      .update(notificationPolicies)
+      .set({ connectionIds: JSON.stringify([conn.id]) })
+      .where(eq(notificationPolicies.key, "global"))
+      .run();
+    await dispatchExpiry(
+      store.db,
+      "resource:" + record.id,
+      "contract",
+      body.title,
+      7,
+    );
+    expect(send.mock.calls.at(-1)?.[0]).toMatchObject({ source: "contract" });
+    expect(send.mock.calls.at(-1)?.[0].subject).toContain("قرارداد");
+  });
+
+  it("saves user contacts and administrator-selected routes without changing LDAP permissions", async () => {
+    const cookie = await admin();
+    const user = store.db
+      .insert(users)
+      .values({
+        username: "ad:reader",
+        authSource: "ldap",
+        passwordHash: "!",
+        role: "user",
+        mustChangePassword: false,
+      })
+      .returning()
+      .get()!;
+    const contact = await req(
+      "/users/" + user.id,
+      "PATCH",
+      {
+        email: "reader@example.org",
+        mobile: "+989120000000",
+        notificationChannels: ["email", "sms"],
+      },
+      cookie,
+    );
+    expect(contact.status).toBe(200);
+    expect((await contact.json()).user).toMatchObject({
+      role: "user",
+      canEdit: false,
+      email: "reader@example.org",
+      notificationChannels: ["email", "sms"],
+    });
+    const conn = store.db
+      .insert(connections)
+      .values({
+        name: "SMTP",
+        channel: "email",
+        config: '{"to":"other@example.org"}',
+      })
+      .returning()
+      .get()!;
+    const policy = {
+      mode: "custom",
+      connectionIds: [],
+      recipients: [{ userId: user.id, connectionId: conn.id }],
+      thresholds: [30, 20, 10, 7, 6, 5, 4, 3, 2, 1, 0],
+      scheduleMode: "milestones",
+      repeatHours: 24,
+    };
+    expect(
+      (await req("/notifications/policies/global", "PUT", policy, cookie))
+        .status,
+    ).toBe(200);
+    const resource = store.db
+      .insert(resources)
+      .values({
+        kind: "contract",
+        title: "Contract",
+        expiresAt: new Date().toISOString().slice(0, 10),
+      })
+      .returning()
+      .get()!;
+    expect(
+      (
+        await (
+          await req(
+            "/notifications/recipients/" + user.id,
+            "GET",
+            undefined,
+            cookie,
+          )
+        ).json()
+      ).targets,
+    ).toContainEqual({
+      key: "resource:" + resource.id,
+      name: "Contract",
+      subscribed: true,
+      inherited: true,
+    });
+    await checkResourceExpiry(store.db);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][1].to).toBe("reader@example.org");
+    const { cookie: ordinaryCookie } = await ordinary();
+    expect(
+      (
+        await req(
+          "/notifications/recipients/" + user.id,
+          "GET",
+          undefined,
+          ordinaryCookie,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await (
+          await req(
+            "/notifications/policies/global",
+            "GET",
+            undefined,
+            ordinaryCookie,
+          )
+        ).json()
+      ).policy.recipients,
+    ).toEqual([]);
+    expect(
+      (
+        await req(
+          "/notifications/policies/global",
+          "PUT",
+          policy,
+          ordinaryCookie,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await req(
+          "/users/" + user.id,
+          "PATCH",
+          { email: "bad\r\nheader" },
+          cookie,
+        )
+      ).status,
+    ).toBe(400);
+  });
+  it("keeps SMS drafts disabled, encrypts tokens and refuses real test delivery", async () => {
+    const cookie = await admin();
+    const result = await req(
+      "/notifications/connections",
+      "POST",
+      {
+        name: "SMS draft",
+        channel: "sms",
+        enabled: true,
+        shared: false,
+        config: {
+          smsUrl: "http://192.0.2.1:1111/api/sms/send-pattern",
+          smsAuthToken: "test-secret",
+        },
+      },
+      cookie,
+    );
+    expect(result.status).toBe(200);
+    const { connection } = await result.json();
+    expect(connection.enabled).toBe(false);
+    expect(JSON.stringify(connection)).not.toContain("test-secret");
+    expect(
+      store.db
+        .select()
+        .from(connections)
+        .where(eq(connections.id, connection.id))
+        .get()!.config,
+    ).not.toContain("test-secret");
+    expect(
+      (
+        await req(
+          "/notifications/connections/" + connection.id + "/test",
+          "POST",
+          {},
+          cookie,
+        )
+      ).status,
+    ).toBe(409);
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("accepts panel port 80 without changing the running listener", async () => {
+    const cookie = await admin();
+    const result = await req("/settings/port", "PUT", { port: 80 }, cookie);
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({
+      desiredPort: 80,
+      requiresServerCommand: true,
+      command: "sudo bash scripts/set-web-port.sh 80",
+    });
+    expect(
+      (await req("/settings/port", "PUT", { port: 0 }, cookie)).status,
+    ).toBe(400);
+  });
 });

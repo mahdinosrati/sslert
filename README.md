@@ -1,8 +1,10 @@
-# Bamdad Alert 1.0.7
+# Bamdad Alert 1.0.8
+
+> Version 1.0.8 is in preparation on `main`; the release tag and deployment are pending. The versioned installation commands below apply after publication.
 
 Self-hosted monitoring for SSL certificates, domain registrations, software licenses and API expiry dates. Built for the Bamdad Information Technology Group.
 
-[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.7.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
+[راهنمای فارسی و نصب Ubuntu 24.04](README.fa.md) · [Release notes](docs/releases/1.0.8.md) · [API guide](docs/API-1.0.1.md) · [AGPL-3.0](LICENSE)
 
 English is the default. Persian includes RTL layout and bundled Vazir fonts. Choose light, dark or system appearance.
 
@@ -11,15 +13,16 @@ English is the default. Persian includes RTL layout and bundled Vazir fonts. Cho
 Install Docker Engine and Compose v2 using the [official Ubuntu instructions](https://docs.docker.com/engine/install/ubuntu/), then:
 
 ```bash
-git clone --branch v1.0.7 https://github.com/mahdinosrati/sslert.git
+git clone --branch v1.0.8 https://github.com/mahdinosrati/sslert.git
 cd sslert
 cp .env.example .env
 chmod 600 .env
+sed -i 's/^WEB_PORT=.*/WEB_PORT=80/' .env
 sudo docker compose up -d --build
 sudo docker compose ps
 ```
 
-Open `http://SERVER_IP:5173`. Initial credentials are **admin / admin**. Changing the password to at least 12 characters is mandatory before accessing the panel. The initial account is created once and never reset on restart. Use HTTPS for public deployments and set `SESSION_COOKIE_SECURE=1` behind your HTTPS proxy. Keep it `0` for local HTTP.
+Open `http://SERVER_IP`. Initial credentials are **admin / admin**. Changing the password to at least 12 characters is mandatory before accessing the panel. The initial account is created once and never reset on restart. Use HTTPS for public deployments and set `SESSION_COOKIE_SECURE=1` behind your HTTPS proxy. Keep it `0` for local HTTP.
 
 The repository slug, npm workspace names and `sslert-data` volume remain unchanged for upgrade compatibility. The application display name is **Bamdad Alert**.
 
@@ -38,21 +41,29 @@ Login now has a Show password checkbox and centered branding. The browser tab us
 
 ## Notifications
 
-Define reusable connections under Notifications: email (Resend), Telegram, webhook, Slack or ntfy. Choose an independent English/Persian message language for each connection. Email requires `RESEND_API_KEY` and a verified sender. Without the key, email is **logged only**, never reported as sent.
+Define reusable connections under Notifications: email (SMTP or Resend), Telegram, webhook, Slack or ntfy. Choose an independent English/Persian message language for each connection. Use SMTP settings in the panel, or Resend with `RESEND_API_KEY` and a verified sender. With Resend and no key, email is **logged only**, never reported as sent.
 
 Send Test sends an explicitly labeled test without waiting for an expiry. Tests are throttled to one per connection per 30 seconds and do not consume real expiry deduplication windows. No actual email or Telegram delivery is claimed until the configured provider reports success.
 
-Global defaults select receivers, reminder thresholds (default `30,7,1,0` days), and repetition interval (default 24 hours). Every domain/license/API record can inherit defaults, replace them with a custom policy, or disable notifications. Custom policies replace rather than add to defaults. Empty receiver lists send nothing. The most urgent matching threshold is used, independently per record/source/connection. Failed attempts also wait for the configured repeat interval; use the test button after correcting settings.
+Global defaults use one-shot milestones at `30,20,10,7,6,5,4,3,2,1,0` calendar days (UTC). Only the latest missed stage is sent. Day zero is the final alert; a service that resumes after expiry sends that final stage once, never daily thereafter. A renewed expiry date starts a new cycle. Durable per-record/source/channel/destination/expiry claims survive history retention. Failed recipients retry after 15 minutes at the next monitoring run. Each record can inherit defaults, replace them with a custom policy, or disable notifications. The legacy hourly-repeat mode remains available.
 
 Connections marked available to users, global connections, and connections already assigned to their items may be selected by users. Connection credentials are visible/editable only to administrators. Recent delivery results appear in Notifications; history is retained for 365 days by default.
 
 `CHECK_INTERVAL=60` runs checks at the start of every hour. License/API checks run in the same scheduler tick. The existing cron mapper supports minute steps below 60 and whole-hour intervals below 24 hours; other values such as 90 or 1440 fall back to hourly.
 
+## Per-user recipients and SMS drafts
+
+Administrators edit each user's email, mobile number, Telegram chat ID and receiving channels in Users & access. Select user/connection pairs in a record's custom policy, or in global defaults. The expandable user subscription section offers the same editor per record. Receiving alerts does not grant record access; LDAP viewers are not automatically subscribed. Disabled users receive no user-targeted messages. Static connection destinations remain independent: uncheck those connections when only selected users should receive alerts.
+
+Destinations are deduplicated per channel. Emails, including tests, are sent individually with individual history rows; recipient addresses are visible only to administrators. SMTP acceptance is not proof of inbox delivery.
+
+SMS drafts accept a gateway URL, pattern ID, ordered variables (title,days,source,expiry), optional encrypted API token and test number. The server forces drafts disabled and refuses test requests. Completing the adapter requires the template, variable order, authentication contract, success/error response and test recipient. No SMS delivery is claimed in 1.0.8.
+
 ## Accounts and access
 
 Administrators create accounts, assign domains/licenses/API records, and independently grant users permission to create records, edit assigned records and send test notifications. Local users view assigned records; LDAP users view all current and future records. Records they create are automatically assigned to them. Deletion, account management, server settings, connection definitions/secrets and the full audit log are administrator-only. The last enabled administrator cannot be demoted or disabled.
 
-Passwords use salted scrypt. Session cookies are HttpOnly and SameSite=Strict, expire eight hours after login, and mutating requests require `X-SSLert-Request: 1`. First login and password resets require a new password. Changing an account or its password revokes its sessions and API tokens. Login attempts are rate-limited. SMS is deferred.
+Passwords use salted scrypt. Session cookies are HttpOnly and SameSite=Strict, expire eight hours after login, and mutating requests require `X-SSLert-Request: 1`. First login and password resets require a new password. Changing an account or its password revokes its sessions and API tokens. Login attempts are rate-limited. SMS configuration is a disabled draft; sending awaits template, gateway response and test-number verification.
 
 ## Configuration and port changes
 
@@ -68,14 +79,16 @@ Passwords use salted scrypt. Session cookies are HttpOnly and SameSite=Strict, e
 Server Settings saves the requested port and displays a command. Run it manually on the Docker host from the repository directory:
 
 ```bash
-sudo bash scripts/set-web-port.sh 8080
+sudo bash scripts/set-web-port.sh 80
 ```
+
+The internal deployment uses HTTP port 80 at `http://panel.bkls.org`, with no explicit port or TLS certificate. Set `WEB_PORT=80` and `SESSION_COOKIE_SECURE=0`. Supported host ports are 1–65535; the application itself stays behind the nginx proxy.
 
 Saving in the UI does not change the active port. The script checks availability, backs up `.env`, recreates only `web`, and restores the previous configuration if application fails. Adjust firewall/proxy rules and reconnect to the new port. Protect `.env` backups, which contain secrets. The application has no Docker socket or host shell access.
 
 ## Upgrade and rollback
 
-Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.7`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
+Back up the database and `.env` before upgrading. See the [complete Persian upgrade procedure](README.fa.md#۹-ارتقا-از-نسخههای-قبلی) for an online SQLite snapshot command. Fetch tags, check out `v1.0.8`, then run `sudo docker compose up -d --build`. Preserve local modifications first. Never use `docker compose down -v` during upgrades.
 
 Migrations preserve old domains, checks and channels. Existing receiver configurations become per-domain custom policies; global email fallback is imported where applicable. Subsequent connection changes belong in the central Notifications UI. Legacy `/domains/:id/channels` configuration is retired after migration.
 
@@ -174,6 +187,6 @@ SMTP setup requires the server hostname, sender, authentication credentials and 
 
 A failed delivery no longer consumes the successful-alert repeat window. Previously, a transient failure with a 168-hour policy could suppress the same alert for seven days. Failed attempts become eligible after 15 minutes and retry at the next monitoring run, provided the item still qualifies. There is no separate 15-minute timer: an hourly schedule normally retries at its next hourly run.
 
-Successful, partial and pending deliveries retain the policy repeat window; manual tests retain their 30-second cooldown. Retry attempts create separate history entries without rewriting previous failures. New SMTP failures distinguish authentication, TLS/certificate, timeout, connection, temporary rejection and message/recipient rejection without exposing raw provider responses or credentials. Historical generic failures cannot be reconstructed. Sent means accepted by the sending service, not guaranteed inbox placement.
+In legacy repeat mode, successful, partial and pending deliveries retain the policy repeat window; manual tests retain their 30-second cooldown. Retry attempts create separate history entries without rewriting previous failures. New SMTP failures distinguish authentication, TLS/certificate, timeout, connection, temporary rejection and message/recipient rejection without exposing raw provider responses or credentials. Historical generic failures cannot be reconstructed. Sent means accepted by the sending service, not guaranteed inbox placement.
 
 Upgrading from 1.0.6 adds no database migration and preserves records, grants, sessions and saved connections. Back up the database, .env and notification.key before upgrading.

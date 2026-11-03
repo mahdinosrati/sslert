@@ -3,8 +3,8 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 port="${1:-}"
-if [[ ! "$port" =~ ^[0-9]{4,5}$ ]] || (( 10#$port < 1024 || 10#$port > 65535 )); then
-  echo 'Usage: sudo bash scripts/set-web-port.sh PORT (1024-65535)' >&2
+if [[ ! "$port" =~ ^[0-9]{1,5}$ ]] || (( 10#$port < 1 || 10#$port > 65535 )); then
+  echo 'Usage: sudo bash scripts/set-web-port.sh PORT (1-65535)' >&2
   exit 2
 fi
 port=$((10#$port))
