@@ -1,6 +1,5 @@
 # Bamdad Alert 1.0.8
 
-> Version 1.0.8 is in preparation on `main`; the release tag and deployment are pending. The versioned installation commands below apply after publication.
 
 Self-hosted monitoring for SSL certificates, domain registrations, software licenses and API expiry dates. Built for the Bamdad Information Technology Group.
 
